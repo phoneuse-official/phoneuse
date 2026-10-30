@@ -1,0 +1,27 @@
+# Private local state and credentials
+.venv/
+**/.state/
+**/.env*
+!**/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/*.mobileprovision
+**/*.sqlite*
+**/*.db
+**/*.ipa
+**/*.dmg
+**/*.ipsw
+**/node_modules/
+**/dist/
+**/.next/
+**/.wrangler/
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+**/*.log
+**/*.tsbuildinfo
+.DS_Store
+mcp.local.json
+release-artifacts/
+**/.vinext/

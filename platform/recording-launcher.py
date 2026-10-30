@@ -1,0 +1,57 @@
+"""Start the existing local recording workspace without exposing credentials."""
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+import urllib.request
+import urllib.parse
+
+ROOT = Path(__file__).resolve().parent
+
+def reachable(url):
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def main():
+    os.chdir(ROOT)
+    state = ROOT / '.state'
+    state.mkdir(exist_ok=True, mode=0o700)
+    if not reachable('http://127.0.0.1:8765/openapi.json'):
+        label = f'gui/{os.getuid()}/local.qunkong.iphone-node'
+        subprocess.run(['launchctl', 'kickstart', label], check=False, capture_output=True)
+        for _ in range(15):
+            if reachable('http://127.0.0.1:8765/openapi.json'): break
+            time.sleep(1)
+        else:
+            raise SystemExit('API is unavailable. Run manage-node-service.py install on this Mac first.')
+    if not reachable('http://localhost:3109/demo'):
+        candidates = sorted((Path.home()/'.nvm/versions/node').glob('*/bin/node'), key=lambda p:p.stat().st_mtime, reverse=True)
+        node = shutil.which('node') or (str(candidates[0]) if candidates else None)
+        if not node: raise SystemExit('Node.js is missing. Install Node 24 before starting.')
+        log = state/'recording-web.log'
+        with log.open('ab') as output:
+            log.chmod(0o600)
+            subprocess.Popen([node, str(ROOT/'web/node_modules/vinext/dist/cli.js'), 'dev', '--host', '127.0.0.1', '--port', '3109'],
+                             cwd=ROOT/'web', stdin=subprocess.DEVNULL, stdout=output, stderr=output,
+                             start_new_session=True)
+        for _ in range(40):
+            if reachable('http://localhost:3109/demo'): break
+            time.sleep(1)
+        else: raise SystemExit('The recording page did not start. Check .state/recording-web.log.')
+    url = 'http://localhost:3109/demo'
+    token_file = state / 'admin-token'
+    if token_file.is_file():
+        token = token_file.read_text().strip()
+        if token:
+            # Fragments stay in the browser; the page clears it immediately.
+            url += '#key=' + urllib.parse.quote(token, safe='')
+    subprocess.run(['open', url], check=True)
+    print('PhoneUse is ready. Connect and unlock the recording iPhone. No phone content was changed.')
+
+if __name__ == '__main__':
+    main()
