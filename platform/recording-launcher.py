@@ -29,7 +29,7 @@ def main():
             time.sleep(1)
         else:
             raise SystemExit('API is unavailable. Run manage-node-service.py install on this Mac first.')
-    if not reachable('http://localhost:3109/demo'):
+    if not reachable('http://localhost:3109/'):
         candidates = sorted((Path.home()/'.nvm/versions/node').glob('*/bin/node'), key=lambda p:p.stat().st_mtime, reverse=True)
         node = shutil.which('node') or (str(candidates[0]) if candidates else None)
         if not node: raise SystemExit('Node.js is missing. Install Node 24 before starting.')
@@ -40,10 +40,10 @@ def main():
                              cwd=ROOT/'web', stdin=subprocess.DEVNULL, stdout=output, stderr=output,
                              start_new_session=True)
         for _ in range(40):
-            if reachable('http://localhost:3109/demo'): break
+            if reachable('http://localhost:3109/'): break
             time.sleep(1)
         else: raise SystemExit('The recording page did not start. Check .state/recording-web.log.')
-    url = 'http://localhost:3109/demo'
+    url = 'http://localhost:3109/'
     token_file = state / 'admin-token'
     if token_file.is_file():
         token = token_file.read_text().strip()

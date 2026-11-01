@@ -1,0 +1,1 @@
+export type Device={id:string;name:string;model:string;ios:string;automation:string;detail?:string;online?:boolean|null;task_id?:string;recovery?:{enabled:boolean;detail:string;phase:string};lease:null|{mine:boolean;expires:number}};

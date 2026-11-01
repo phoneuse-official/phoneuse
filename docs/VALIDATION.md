@@ -7,7 +7,7 @@ Checked locally on 2026-10-30, on the source-only public checkout.
 - Backend tests: 39 passed, with temporary runtime state.
 - Clean-state API smoke: OpenAPI available, unauthenticated tasks rejected, authenticated task list empty.
 - Web TypeScript check and production build passed.
-- Production HTTP smoke on an isolated loopback port rendered `/demo`, PhoneUse Local branding and the outbound PhoneUse link.
+- Production HTTP smoke on an isolated loopback port rendered `/`, PhoneUse Local branding and the outbound PhoneUse link.
 - `npm audit`: zero known vulnerabilities at check time.
 - `pip-audit` on the pinned requirements: zero known vulnerabilities at check time.
 - Public source tree scan: no findings in checked paths/patterns. This is not a guarantee against all possible sensitive data.
