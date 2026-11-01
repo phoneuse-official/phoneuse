@@ -35,7 +35,9 @@ Never replay an uncertain purchase or message after a disconnect; check the app 
 
 ## 3. Video
 
-WDA MJPEG is the default. Use it for the first successful run.
+WDA MJPEG is used when available. If its USB stream is unavailable, the preview automatically polls
+WebDriverAgent screenshots over the existing USB connection at a lower frame rate. This avoids
+requiring a separate capture-device mapping for a working preview.
 Optional native capture can be built with `.venv/bin/python platform/build-native.py`.
 The helper `platform/.state/bin/probe-capture` lists local capture IDs. Bind only the verified device
 in `platform/.state/native-capture.json` as a JSON mapping from its UDID to its capture ID.

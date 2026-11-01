@@ -3,10 +3,10 @@ import {useEffect,useRef,useState,type CanvasHTMLAttributes} from 'react';
 type Props=CanvasHTMLAttributes<HTMLCanvasElement>&{deviceId:string;apiKey:string;accessRevision?:string;locale?:'en'|'zh';hideIndicator?:boolean};
 export default function LiveScreen({deviceId,apiKey,accessRevision,locale='zh',hideIndicator=false,...canvasProps}:Props){
  const canvas=useRef<HTMLCanvasElement>(null),live=useRef(false),source=useRef('');
- const [status,setStatus]=useState('正在连接手机…'),[fps,setFps]=useState(0),[hasFrame,setHasFrame]=useState(false),[connected,setConnected]=useState(false);
+ const [status,setStatus]=useState('正在连接手机…'),[fps,setFps]=useState(0),[hasFrame,setHasFrame]=useState(false),[connected,setConnected]=useState(false),[streamError,setStreamError]=useState('');
  useEffect(()=>{
   let disposed=false,ws:WebSocket|null=null,retry:ReturnType<typeof setTimeout>|undefined,watch:ReturnType<typeof setInterval>;
-  let pending:Blob|null=null,decoding=false,count=0,start=performance.now(),receivedAt=performance.now(),attempt=0,generation=0,connecting=false,terminal=false;
+  let pending:Blob|null=null,decoding=false,count=0,start=performance.now(),receivedAt=performance.now(),attempt=0,generation=0,connecting=false,terminal=false,lastStreamError:string|null=null;
   let request:AbortController|null=null;
   function markOffline(message:string,clear=false){live.current=false;setConnected(false);setFps(0);setStatus(message);if(clear){setHasFrame(false);canvas.current?.getContext('2d')?.clearRect(0,0,canvas.current.width,canvas.current.height);}}
   function retrySoon(){if(disposed||terminal||document.hidden)return;clearTimeout(retry);retry=setTimeout(()=>void connect(),Math.min(500*2**Math.min(attempt++,5),8000));}
@@ -32,8 +32,8 @@ export default function LiveScreen({deviceId,apiKey,accessRevision,locale='zh',h
     }
     const socket=new WebSocket(`ws://127.0.0.1:8765/api/devices/${encodeURIComponent(deviceId)}/stream`);ws=socket;socket.binaryType='blob';receivedAt=performance.now();
     socket.onopen=()=>{if(!disposed&&gen===generation)socket.send(JSON.stringify({token:apiKey,keepalive:true}));};
-    socket.onmessage=e=>{if(disposed||gen!==generation)return;if(e.data instanceof Blob){receivedAt=performance.now();pending=e.data;attempt=0;void draw(gen);}else{try{const d=JSON.parse(e.data);if(d.type==='ready'||d.type==='source')source.current=d.source==='native-usb'?'USB高速画面':'兼容画面';if(d.type==='error'){terminal=d.retryable===false;markOffline(d.message,terminal);}}catch{markOffline('正在恢复视频连接…');}}};
-    socket.onclose=()=>{if(disposed||gen!==generation)return;generation++;pending=null;ws=null;if(!terminal){markOffline('画面暂停，正在自动重连…');retrySoon();}};
+    socket.onmessage=e=>{if(disposed||gen!==generation)return;if(e.data instanceof Blob){receivedAt=performance.now();lastStreamError=null;setStreamError('');pending=e.data;attempt=0;void draw(gen);}else{try{const d=JSON.parse(e.data);if(d.type==='ready'||d.type==='source')source.current=d.source==='native-usb'?'USB高速画面':d.source==='wda-screenshot'?'USB稳定截图':'兼容画面';if(d.type==='error'){terminal=d.retryable===false;lastStreamError=d.message;setStreamError(d.message);markOffline(d.message,terminal);}}catch{markOffline('正在恢复视频连接…');}}};
+    socket.onclose=()=>{if(disposed||gen!==generation)return;generation++;pending=null;ws=null;if(!terminal){markOffline(lastStreamError?`${lastStreamError} · 正在自动重连…`:'画面暂停，正在自动重连…');retrySoon();}};
     socket.onerror=()=>socket.close();
    }catch(e){if(!disposed&&gen===generation){markOffline(`${(e as Error).name==='AbortError'?'节点连接超时':(e as Error).message} · 正在自动重连`);retrySoon();}}
    finally{clearTimeout(timer);connecting=false;}
@@ -43,9 +43,9 @@ export default function LiveScreen({deviceId,apiKey,accessRevision,locale='zh',h
   window.addEventListener('online',wake);document.addEventListener('visibilitychange',wake);
   return()=>{disposed=true;generation++;pending=null;live.current=false;request?.abort();clearTimeout(retry);clearInterval(watch);ws?.close();window.removeEventListener('online',wake);document.removeEventListener('visibilitychange',wake);};
  },[deviceId,apiKey,accessRevision]);
- const english=locale==='en';const displayStatus=english?(/权限|凭证/.test(status)?'Access ended. Reconnect Studio.':/主动释放|已释放/.test(status)?'Connection released. Click Reconnect screen.':/后台/.test(status)?'Video paused while this tab is in the background.':/超时/.test(status)?'Phone video timed out. Reconnecting…':/视频|画面|新画面/.test(status)?'Waiting for live phone video. Reconnecting…':/正在连接/.test(status)?'Connecting to the live device…':status):status;
+ const english=locale==='en';const displayStatus=english?(/权限|凭证/.test(status)?'Access ended. Reconnect Studio.':/主动释放|已释放/.test(status)?'Connection released. Click Reconnect screen.':/后台/.test(status)?'Video paused while this tab is in the background.':/超时/.test(status)?'Phone video timed out. Reconnecting…':/视频|画面|新画面/.test(status)&&!streamError?'Waiting for live phone video. Reconnecting…':/正在连接/.test(status)?'Connecting to the live device…':status):status;
  return <><canvas {...canvasProps} ref={canvas} aria-label={english?'Live phone screen':'手机实时画面，可点击和拖动'} aria-disabled={!connected}
  onPointerDown={e=>{if(live.current)canvasProps.onPointerDown?.(e);}} onPointerUp={e=>{if(live.current)canvasProps.onPointerUp?.(e);}}
  onKeyDown={e=>{if(live.current)canvasProps.onKeyDown?.(e);}}
- style={{visibility:hasFrame?'visible':'hidden',opacity:connected?1:.45,pointerEvents:connected?'auto':'none'}}/>{!connected&&<div className="live-placeholder" role="status">{displayStatus}{hasFrame&&<small>{english?'Last received frame. Waiting for live video.':'显示的是中断前画面，暂不可操作'}</small>}</div>}{!hideIndicator&&<span className="live-indicator">{connected?(english?`● LIVE · ${fps||'…'} FPS · ${source.current==='USB高速画面'?'USB':'Compatible stream'}`:`● 实时 · ${fps||'…'} FPS · ${source.current} · 自动保持连接`):displayStatus}</span>}</>;
+ style={{visibility:hasFrame?'visible':'hidden',opacity:connected?1:.45,pointerEvents:connected?'auto':'none'}}/>{!connected&&<div className="live-placeholder" role="status">{displayStatus}{hasFrame&&<small>{english?'Last received frame. Waiting for live video.':'显示的是中断前画面，暂不可操作'}</small>}</div>}{!hideIndicator&&<span className="live-indicator">{connected?(english?`● LIVE · ${fps||'…'} FPS · ${source.current==='USB高速画面'?'USB':source.current==='USB稳定截图'?'USB snapshots':'Compatible stream'}`:`● 实时 · ${fps||'…'} FPS · ${source.current} · 自动保持连接`):displayStatus}</span>}</>;
 }

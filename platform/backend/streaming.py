@@ -1,4 +1,5 @@
 """One MJPEG reader per phone; subscribers always receive the newest frame."""
+import base64
 import http.client
 import socket
 import threading
@@ -86,23 +87,33 @@ class FrameSource:
                     return
                 except (DeviceError,OSError):
                     if self.stopped.is_set():return
-                    if self.seq:raise
-                    # Startup failure keeps an already usable WDA path available.
                     self.transport='wda-mjpeg'
 
-            sock = connect(device['DeviceID'], 9100)
-            self.socket = sock
-            if self.stopped.is_set():
-                return
-            sock.settimeout(6)
-            sock.sendall(b'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
-            response = http.client.HTTPResponse(sock)
-            response.begin()
-            if response.status != 200 or 'multipart/' not in response.getheader('Content-Type', ''):
-                raise DeviceError('手机没有提供 MJPEG 视频流')
-            threading.Thread(target=self._configure,daemon=True).start()
-            while not self.stopped.is_set():
-                self.publish(read_frame(response))
+            try:
+                sock = connect(device['DeviceID'], 9100)
+                self.socket = sock
+                if self.stopped.is_set():
+                    return
+                sock.settimeout(6)
+                sock.sendall(b'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+                response = http.client.HTTPResponse(sock)
+                response.begin()
+                if response.status != 200 or 'multipart/' not in response.getheader('Content-Type', ''):
+                    raise DeviceError('手机没有提供 MJPEG 视频流')
+                threading.Thread(target=self._configure,daemon=True).start()
+                while not self.stopped.is_set():
+                    self.publish(read_frame(response))
+            except (DeviceError,OSError,http.client.HTTPException):
+                if self.stopped.is_set():
+                    return
+                if response is not None:
+                    response.close()
+                    response=None
+                if self.socket:
+                    self.socket.close()
+                    self.socket=None
+                self.transport='wda-screenshot'
+                self._run_screenshots()
         except Exception as exc:
             with self.condition:
                 self.error = str(exc) if isinstance(exc, DeviceError) else '视频连接中断，请重连'
@@ -112,6 +123,32 @@ class FrameSource:
                 response.close()
             if self.socket:
                 self.socket.close()
+
+    def _run_screenshots(self):
+        lock=controller.lock(self.device)
+        while not self.stopped.is_set():
+            if not lock.acquire(timeout=5):
+                continue
+            try:
+                if self.stopped.is_set():
+                    return
+                try:
+                    value=controller._perform(self.device,'screenshot',{})
+                except DeviceError:
+                    controller.sessions.pop(self.device,None)
+                    raise
+            finally:
+                lock.release()
+            if not isinstance(value,str) or len(value)>((MAX_FRAME+2)//3)*4:
+                raise DeviceError('手机返回的屏幕截图无效或过大')
+            try:
+                frame=base64.b64decode(value,validate=True)
+            except (ValueError,TypeError):
+                raise DeviceError('手机返回的屏幕截图无效')
+            if not 4<=len(frame)<=MAX_FRAME or not (frame.startswith(b'\xff\xd8') and frame.endswith(b'\xff\xd9') or frame.startswith(b'\x89PNG\r\n\x1a\n')):
+                raise DeviceError('手机返回的屏幕截图格式无效')
+            self.publish(frame)
+            self.stopped.wait(.5)
 
     def _configure(self):
         # First frame never waits for a WDA control session or a running command.

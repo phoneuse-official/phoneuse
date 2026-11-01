@@ -34,37 +34,67 @@ Accessibility support varies by app. A task marked finished is a model-reported 
 
 No jailbreak, pre-signed IPA, Apple developer image, or credential is bundled.
 
-## Quick start
+## Get the phone screen showing
 
-Download or clone this repository, then run commands from its root:
+These steps take you from a fresh checkout to live video in the local web app. You need a Mac with full Xcode, Python 3.13, Node.js 24 or newer, npm, Git, and an iPhone you own or are authorized to use. WDA signing and developer-mode setup are required by Apple; PhoneUse cannot skip them.
+
+### 1. Install PhoneUse on the Mac
+
+Download or clone this repository, open Terminal, change to the repository root, and run the installer once:
 
 ```sh
 ./"Install PhoneUse.command"
 ```
 
-1. Follow [iPhone setup](platform/docs/SETUP.md) to sign and run WebDriverAgent on **your** phone.
-2. In one terminal, start the local API:
+It creates the Python environment, installs the locked backend dependencies, and builds the web app. If it reports a missing tool, install the required version listed above and rerun it.
 
-   ```sh
-   ./platform/start-api.sh
-   ```
+### 2. Prepare the iPhone and start WebDriverAgent
 
-3. In a second terminal, launch the website:
+1. Connect the iPhone to the Mac over USB, unlock it, and accept **Trust This Computer** if prompted. Keep it unlocked during setup.
+2. On the iPhone, enable **Developer Mode** in **Settings → Privacy & Security → Developer Mode**, restart when prompted, and confirm Developer Mode after the restart.
+3. Get WebDriverAgent only from the official [Appium WebDriverAgent repository](https://github.com/appium/WebDriverAgent) and follow Appium's [real-device setup](https://appium.github.io/appium-xcuitest-driver/latest/preparation/real-device-config/).
+4. Open `WebDriverAgent.xcodeproj` in Xcode. Select the `WebDriverAgentRunner` target, choose your Apple signing team, set a unique bundle identifier if Xcode requires one, and select your physical iPhone as the run destination.
+5. Run **Product → Test** (⌘U). Resolve any signing, trust, or iOS compatibility errors in Xcode, and keep the test running. PhoneUse needs WDA running on the phone for the live preview and phone control.
 
-   ```sh
-   ./"Start PhoneUse.command"
-   ```
+See [the full iPhone setup and troubleshooting guide](platform/docs/SETUP.md) for pairing and the optional `start-wda.py` launcher. Do not start that launcher while Xcode already owns an active WDA runner.
 
-The launcher opens **http://localhost:3109/demo** and supplies the newly generated local API token.
-Keep the API terminal open. The frontend runs as a background process, with logs in `platform/.state/recording-web.log`.
-The launcher opens an existing service on these ports if one is already running; stop your old local Studio first if you intend to run this checkout.
+### 3. Start the local API
 
-Sign into Codex with `codex login` before submitting prompts. If the API cannot find it, launch the API with
-`QUNKONG_CODEX_BIN` set to the absolute path returned by `command -v codex`.
-Optionally set `QUNKONG_CODEX_MODEL` to a model available to your account; otherwise the CLI selects its default.
+In a Terminal window at the repository root, run:
 
-**Send is disabled?** The selected phone must report `automation: ready`. Unlock the phone and run
-WebDriverAgentRunner's tests in Xcode. Live video alone does not prove that control is connected.
+```sh
+./platform/start-api.sh
+```
+
+Leave this Terminal window open. Confirm the API is responding by opening **http://127.0.0.1:8765/health**; it should return JSON containing `"ok":true`.
+
+### 4. Open the PhoneUse screen
+
+In a second Terminal window at the repository root, run:
+
+```sh
+./"Start PhoneUse.command"
+```
+
+This opens **http://localhost:3109/demo** and passes the local API key to the page automatically. Keep the API running. The web app runs in the background; its log is `platform/.state/recording-web.log`.
+
+If the page asks for an API key, reopen it with `Start PhoneUse.command` so the local key is supplied. If the API or page is already running on ports 8765 or 3109, the launcher may use that existing instance; stop the other local PhoneUse checkout before starting this one.
+
+### 5. Select the phone and confirm live video
+
+1. In the **PhoneUse Local** page, select the connected phone from the device menu on the right.
+2. Wait for the live phone screen to appear. If it does not, click **Reconnect screen** once after confirming WDA is still running in Xcode.
+3. Check that the image is updating, not just showing a dimmed last frame. A stale frame is not a live connection.
+
+You do not need to sign into Codex just to view the screen. To use natural-language tasks after video works, run `codex login`. If the API cannot find the CLI, start it with `QUNKONG_CODEX_BIN` set to the absolute path returned by `command -v codex`. Optionally set `QUNKONG_CODEX_MODEL` to a model available to your account.
+
+### If the screen still does not appear
+
+- **“Waiting for live phone video. Reconnecting…”** means the page is not receiving fresh frames. Confirm the API health check above, select the online phone, make sure the page is in the foreground, and verify WDA is still running in Xcode. Then click **Reconnect screen**.
+- **“Device port not open” / “automation: not running”** means the Mac can see the phone over USB, but WDA is not running or reachable on the phone. The USB cable alone is not enough: complete step 2 and keep the WDA test running.
+- **Phone is missing or offline in the menu:** unlock it, confirm the iPhone trusts this Mac, reconnect USB, and wait for device discovery to refresh.
+- **“automation: ready”** confirms the control service is ready. Live video and control status are shown separately, so check for a moving image as well before using the phone.
+- If the API reports a port conflict or the page is showing another checkout, stop the other local instance before restarting the API and page. API output is in the Terminal where `start-api.sh` is running; web startup errors are in `platform/.state/recording-web.log`.
 
 ## How it works
 
