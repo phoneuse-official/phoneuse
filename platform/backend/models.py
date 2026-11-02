@@ -9,7 +9,8 @@ class Action(BaseModel):
                     'launch_app', 'terminate_app', 'open_url', 'set_orientation', 'double_tap', 'pinch',
                     'lock', 'unlock', 'locked', 'alert_text', 'accept_alert', 'dismiss_alert',
                     'clipboard_get', 'clipboard_set', 'dismiss_keyboard',
-                    'source_fast', 'find_elements', 'element_state', 'element_click']
+                    'source_fast', 'find_elements', 'element_state', 'element_click',
+                    'element_input_state', 'element_fill', 'element_submit_search']
     query: str | None = Field(default=None, min_length=1, max_length=500)
     element_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
     session_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
@@ -28,12 +29,18 @@ class Action(BaseModel):
     @model_validator(mode='after')
     def required_params(self):
         fields = {'find_elements': ['query'], 'element_state': ['element_id','session_id'],
+                  'element_input_state': ['element_id','session_id'],
+                  'element_fill': ['element_id','session_id','text'],
+                  'element_submit_search': ['element_id','session_id','text'],
                   'element_click': ['element_id','session_id'], 'pinch': ['x', 'y', 'scale'], 'double_tap': ['x', 'y'], 'clipboard_set': ['text'], 'tap': ['x', 'y'], 'long_press': ['x', 'y'], 'swipe': ['x', 'y', 'x2', 'y2'],
                   'text': ['text'], 'button': ['name'], 'launch_app': ['bundle_id'],
                   'terminate_app': ['bundle_id'], 'open_url': ['url'], 'set_orientation': ['orientation']}
         for field in fields.get(self.action, []):
             if getattr(self, field) is None:
                 raise ValueError(f'{self.action} 需要 {field}')
+        if self.action in ('element_fill','element_submit_search') and (
+            not self.text or len(self.text)>2000 or any(ord(c)<32 or ord(c)==127 for c in self.text)):
+            raise ValueError('Targeted input requires nonempty single-line text, up to 2000 characters')
         if self.action == 'pinch' and not (0.2 <= self.x <= 0.8 and 0.2 <= self.y <= 0.8):
             raise ValueError('缩放中心需在屏幕 20%–80% 范围内，为双指手势保留空间')
         return self

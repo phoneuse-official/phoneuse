@@ -2,6 +2,7 @@ import base64
 from contextlib import contextmanager
 import hashlib
 import json
+import re
 import os
 import secrets
 import sqlite3
@@ -188,7 +189,7 @@ class Controller:
 
     def perform(self, owner, device, action, params, job=None):
         # Screenshots and state reads stay available during automation.
-        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state')
+        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state', 'element_input_state')
         if action not in reads:
             self.check_reservation(device, job)
         with self.lock(device):
@@ -233,13 +234,43 @@ class Controller:
                     raise DeviceError('手机返回的剪贴板文字无效')
             return value
         # Element handles are bound to the issuing session; never rebind or replay them.
-        if action in ('element_state', 'element_click'):
+        if action in ('element_state', 'element_click','element_input_state','element_fill','element_submit_search'):
             if self.sessions.get(device) != p['session_id']:
                 raise DeviceError('元素会话已失效，请重新查询元素')
             root = '/session/' + quote(p['session_id'], safe='')
             element = root + '/element/' + quote(p['element_id'], safe='')
             displayed = wda_request(device, 'GET', element + '/displayed').get('value')
             enabled = wda_request(device, 'GET', element + '/enabled').get('value')
+            if action in ('element_input_state','element_fill','element_submit_search'):
+                def attribute(name):
+                    return wda_request(device,'GET',element+'/attribute/'+name).get('value')
+                kind=wda_request(device,'GET',element+'/name').get('value')
+                # Do not retrieve secure input values, even for the read-only probe.
+                if kind not in ('XCUIElementTypeTextField','XCUIElementTypeSearchField'):
+                    return {'eligible':False,'reason':'Target is not an ordinary single-line input'}
+                label=' '.join(str(attribute(name) or '') for name in ('name','label'))
+                if re.search(r'password|passcode|verification|one.time|\botp\b|\bpin\b|credit|card number|cvv|username|e.?mail|sign.in|log.in',label,re.I):
+                    return {'eligible':False,'reason':'Credential or payment field requires human action'}
+                eligible=displayed is True and enabled is True
+                value=attribute('value')
+                placeholder=attribute('placeholderValue')
+                searchable=kind=='XCUIElementTypeSearchField' or bool(re.search(r'search|address|url|website',label,re.I))
+                state={'eligible':eligible,'type':kind,'value':value,'searchable':searchable}
+                if action=='element_input_state':return state
+                if not eligible:return {'status':'needs_replan','reason':'Input is hidden or disabled'}
+                if action=='element_fill':
+                    if value==p['text'] and value!=placeholder:return {'status':'completed','verified':True,'already_matched':True}
+                    # Bind every mutation to this exact handle; never use global keyboard typing.
+                    wda_request(device,'POST',element+'/click',{})
+                    wda_request(device,'POST',element+'/clear',{})
+                    wda_request(device,'POST',element+'/value',{'value':list(p['text'])})
+                    verified=attribute('value')==p['text'] and p['text']!=placeholder
+                    return {'status':'completed' if verified else 'uncertain','verified':verified,
+                            'reason':None if verified else 'Entered text could not be verified; do not retype automatically'}
+                if not searchable:return {'status':'needs_replan','reason':'Submission is limited to observed search or address fields'}
+                if value!=p['text'] or value==placeholder:return {'status':'needs_replan','reason':'Field value does not match a verified query; nothing submitted'}
+                wda_request(device,'POST',element+'/value',{'value':['\n']})
+                return {'status':'submitted'}
             if action == 'element_click':
                 if displayed is not True or enabled is not True:
                     raise DeviceError('元素不可见或未启用，未执行点击')
