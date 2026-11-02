@@ -9,7 +9,8 @@
     "dev": "vinext dev --host 127.0.0.1 --port 3109",
     "build": "vinext build",
     "start": "vinext start --hostname 127.0.0.1 --port 3109",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -29,8 +30,6 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.37",
-    "eslint": "9.39.4",
-    "eslint-config-next": "16.4.3",
     "react-server-dom-webpack": "19.3.1",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
@@ -42,6 +41,9 @@
   "overrides": {
     "satori": {
       "fflate": "0.7.5"
+    },
+    "@ts-morph/common": {
+      "minimatch": "11.0.4"
     }
   }
 }

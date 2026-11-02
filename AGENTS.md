@@ -1,7 +1,7 @@
 # PhoneUse Local
 
 Python backend: `platform/backend`. React UI: `platform/web`.
-Run backend tests from `platform`; use `QUNKONG_STATE_DIR` pointing to a temporary directory.
+Run backend tests from `platform`; use `PHONEUSE_STATE_DIR` pointing to a temporary directory.
 Keep API and UI bound to loopback. Never commit `.state`, tokens, signing assets,
 pairing records, device identifiers, screenshots, personal contacts or task history.
 Use only official WebDriverAgent sources. Keep native capture opt-in.

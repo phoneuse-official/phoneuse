@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, quote
 import xml.etree.ElementTree as ET
 import httpx
+from .config import setting
 from .models import Action
 from . import phone_program
 
@@ -103,7 +104,7 @@ class Model:
     def __init__(self, config):
         base=config['base_url'].rstrip('/')
         if urlsplit(base).scheme!='https':raise ValueError('Model base_url must use HTTPS')
-        key=os.environ.get(config.get('api_key_env','QUNKONG_AI_API_KEY'),'')
+        key=os.environ.get(config['api_key_env'],'') if config.get('api_key_env') else setting('AI_API_KEY','')
         if not key or not key.isascii():raise ValueError('Configure a valid model API key in the named environment variable')
         header=config.get('auth_header','x-api-key')
         if header not in ('x-api-key','Authorization'):raise ValueError('Unsupported auth_header')

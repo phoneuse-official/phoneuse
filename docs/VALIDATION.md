@@ -1,23 +1,24 @@
-# Release preparation validation
+# Release validation
 
-Checked locally on 2026-10-30, on the source-only public checkout.
+## 2026-11-02 — launch preparation
 
-- Fresh Python 3.13 virtual environment installed the pinned requirements successfully.
-- `pip check`: no broken requirements.
-- Backend tests: 39 passed, with temporary runtime state.
-- Clean-state API smoke: OpenAPI available, unauthenticated tasks rejected, authenticated task list empty.
-- Web TypeScript check and production build passed.
-- Production HTTP smoke on an isolated loopback port rendered `/`, PhoneUse Local branding and the outbound PhoneUse link.
-- `npm audit`: zero known vulnerabilities at check time.
-- `pip-audit` on the pinned requirements: zero known vulnerabilities at check time.
-- Public source tree scan: no findings in checked paths/patterns. This is not a guarantee against all possible sensitive data.
-- Shell syntax and Python compilation checks passed.
+Checked on macOS with Python 3.13 and Node.js 24, from a clean checkout.
 
-The tests did not operate a physical phone, submit a real model task, verify signing on a fresh Mac,
-or run GitHub-hosted CI. Those remain release acceptance checks. The source is packaged as an
-experimental developer preview; no universal installation or production reliability claim is made.
-The original working Studio installation was not modified during preparation.
+- `Install PhoneUse.command` created the virtual environment, installed pinned requirements and built the web app.
+- Backend tests: 92 passed, with temporary runtime state.
+- Web: type check, 6 unit tests and production build passed.
+- `pip-audit` on the pinned requirements: no known vulnerabilities.
+- `npm audit --audit-level=moderate`: passed. Three low-severity advisories remain in the shadcn CLI's
+  `deepmerge`, which has no patched release; the CLI is not used at runtime.
+- Public-tree scan: 0 findings. This is not a guarantee against all sensitive data.
+- Clean-state API smoke test: `/health` and `/docs` served, unauthenticated requests rejected (401),
+  requests from other origins rejected (403), authenticated device list returned.
+- The web UI rendered its connect screen.
 
-The web stack was updated to patched Next.js, React, Vinext and Vite releases. A narrow Satori/fflate
-override removes a known transitive advisory. Python pins were updated for certifi, OpenTelemetry API,
-Pillow, PyJWT and urllib3. Audit results can change as new advisories are published.
+Not tested: a physical iPhone, a real model task, signing on a fresh Mac. These remain release acceptance
+checks before the launch is announced.
+
+## 2026-10-30 — first public preview
+
+Backend tests (39 at the time), web type check and build, `npm audit`, `pip-audit`, the public-tree scan and a
+clean-state API smoke test passed. No physical phone or model task was exercised.

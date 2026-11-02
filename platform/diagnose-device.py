@@ -23,7 +23,7 @@ async def diagnose(device):
                         for bid, app in apps.items() if any(word in (bid+' '+str(app.get('CFBundleDisplayName',''))).lower()
                                                            for word in ['panda', 'webdriver', 'xctrunner', 'easyclick'])]
                 else:
-                    result['next_step'] = '解锁手机并信任此电脑，然后重新诊断。'
+                    result['next_step'] = 'Unlock the iPhone, trust this Mac, then run the diagnosis again.'
     except Exception as exc:
         result['diagnostic_error'] = type(exc).__name__ + ': ' + str(exc)
     try:

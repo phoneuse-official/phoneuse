@@ -12,7 +12,7 @@ FORMATTED_DUMMY_ADDRESS = "+1 (415) 555-0123"
 
 @pytest.fixture
 def invitation(tmp_path, monkeypatch):
-    monkeypatch.setenv("QUNKONG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("PHONEUSE_STATE_DIR", str(tmp_path / "state"))
     sys.modules.pop("backend.demo_invitation", None)
     sys.modules.pop("backend.service", None)
     return importlib.import_module("backend.demo_invitation")

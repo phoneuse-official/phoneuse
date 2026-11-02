@@ -12,9 +12,9 @@ async def main():
     try:
         async with asyncio.timeout(75):
             async with await create_using_usbmux(serial=args.udid, pair_timeout=60) as device:
-                print('配对成功' if device.paired else '尚未配对')
+                print('Paired.' if device.paired else 'Not paired yet.')
     except Exception as exc:
-        print(f'未完成配对：{type(exc).__name__}。请解锁手机并确认信任，再重试。')
+        print(f'Pairing did not finish: {type(exc).__name__}. Unlock the iPhone, confirm Trust This Computer, and try again.')
         raise SystemExit(1)
 
 
