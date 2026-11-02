@@ -1,5 +1,6 @@
 """Bounded Anthropic Messages tool loop. No provider secrets or screen text in metrics."""
 import argparse
+import copy
 import json
 import os
 import time
@@ -34,13 +35,44 @@ def compact_source(value, limit=20000):
     def visit(node,depth):
         nonlocal count
         attrs={k:v for k,v in node.attrib.items() if k in ('type','name','label','value','enabled','x','y','width','height')}
-        lines.append(' '*min(depth,40)+json.dumps(attrs,ensure_ascii=False));count+=1
+        lines.append(' '*min(depth,40)+json.dumps(attrs,ensure_ascii=False,separators=(',',':')));count+=1
         for child in node:visit(child,depth+1)
     visit(tree,0)
     text='\n'.join(lines)
     return {'tree':text[:limit],'nodes':count,'truncated':len(text)>limit,
             'excluded_attributes':value.get('excluded_attributes',[]),
             'warning':'Visibility is unknown. Tree depth may be limited by current WDA configuration.'}
+
+def prompt_history(messages, recent_observations=2):
+    """Keep actions and results, but retire old screen trees from model context."""
+    if isinstance(recent_observations,bool) or not isinstance(recent_observations,int) or recent_observations<1:
+        raise ValueError('recent_observations must be a positive integer')
+    history=copy.deepcopy(messages)
+    observations=[]
+    for message in history:
+        content=message.get('content')
+        if not isinstance(content,list):continue
+        for block in content:
+            if block.get('type')!='tool_result':continue
+            try:value=json.loads(block['content'])
+            except (ValueError,TypeError,KeyError):continue
+            if not isinstance(value,dict):continue
+            page=value.get('page',value)
+            if isinstance(page,dict) and 'tree' in page:
+                observations.append((block,value,page))
+    for block,value,page in observations[:-recent_observations]:
+        page.pop('tree')
+        page['observation_note']='Historical screen omitted; use the latest observation for current targets. Request source_fast again if earlier content is needed.'
+        block['content']=json.dumps(value,ensure_ascii=False,separators=(',',':'))
+    return history
+
+def usage_tokens(usage):
+    """Codex cached_input_tokens is a subset of input_tokens, not extra usage.
+
+    Anthropic cache_read/cache_creation_input_tokens are separate input buckets.
+    """
+    return sum(usage.get(k,0) for k in (
+        'input_tokens','output_tokens','cache_read_input_tokens','cache_creation_input_tokens'))
 
 class Phone:
     def __init__(self, base, key, device):
@@ -91,12 +123,17 @@ def run(task,phone,model,config):
             if time.monotonic()-start>300:
                 report['status']='time_limit';break
             t=time.monotonic()
-            try:response=model.turn(messages)
+            try:
+                # Screen history may contain facts needed for a multi-page answer.
+                # Only discard it when the caller explicitly opts into that tradeoff.
+                limit=config.get('recent_observations')
+                response=model.turn(messages if limit is None else prompt_history(messages,limit))
             finally:
                 report['model_seconds']+=time.monotonic()-t;report['model_calls']+=1
             for k,v in response.get('usage',{}).items():
                 if isinstance(v,int):report['reported_usage'][k]=report['reported_usage'].get(k,0)+v
-            if sum(v for k,v in report['reported_usage'].items() if k.endswith('tokens'))>config.get('max_total_reported_tokens',40000):
+            report['budget_tokens']=usage_tokens(report['reported_usage'])
+            if report['budget_tokens']>config.get('max_total_reported_tokens',40000):
                 report['status']='token_limit';break
             content=response.get('content',[])
             calls=[b for b in content if b.get('type')=='tool_use']
