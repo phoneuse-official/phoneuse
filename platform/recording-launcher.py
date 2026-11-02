@@ -22,8 +22,10 @@ def main():
     state = ROOT / '.state'
     state.mkdir(exist_ok=True, mode=0o700)
     if not reachable('http://127.0.0.1:8765/openapi.json'):
-        label = f'gui/{os.getuid()}/com.phoneuse.local-node'
-        subprocess.run(['launchctl', 'kickstart', label], check=False, capture_output=True)
+        # Installs made before the rename still use the older label.
+        for name in ('com.phoneuse.local-node', 'local.qunkong.iphone-node'):
+            if subprocess.run(['launchctl', 'kickstart', f'gui/{os.getuid()}/{name}'], check=False, capture_output=True).returncode == 0:
+                break
         for _ in range(15):
             if reachable('http://127.0.0.1:8765/openapi.json'): break
             time.sleep(1)

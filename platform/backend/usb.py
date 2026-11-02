@@ -100,7 +100,7 @@ def wda_request(udid, method, path, body=None, *, binary=False, content_type=Non
         result = json.loads(raw)
         value = result.get('value')
         if response.status >= 400 or isinstance(value, dict) and value.get('error'):
-            if binary and isinstance(value, dict) and re.search(r'authori[sz]|permission|\u6388\u6743', str(value.get('message', '')), re.I):
+            if binary and isinstance(value, dict) and re.search(r'authori[sz]|\u6388\u6743', str(value.get('message', '')), re.I):
                 raise OutcomeUnknown('Waiting for Photos permission: open WebDriverAgent on the iPhone, allow access, and check the photo library first. This request may still finish after permission is granted, so do not retry it directly')
             raise DeviceError(f"WDA: {value.get('error', response.status) if isinstance(value, dict) else response.status}")
         return result

@@ -3,7 +3,7 @@ import {useEffect,useRef,useState,type CanvasHTMLAttributes} from 'react';
 type Props=CanvasHTMLAttributes<HTMLCanvasElement>&{deviceId:string;apiKey:string;accessRevision?:string;hideIndicator?:boolean};
 export default function LiveScreen({deviceId,apiKey,accessRevision,hideIndicator=false,...canvasProps}:Props){
  const canvas=useRef<HTMLCanvasElement>(null),live=useRef(false),source=useRef('');
- const [status,setStatus]=useState('Connecting to the live device…'),[fps,setFps]=useState(0),[hasFrame,setHasFrame]=useState(false),[connected,setConnected]=useState(false),[streamError,setStreamError]=useState('');
+ const [status,setStatus]=useState('Connecting to the live device…'),[fps,setFps]=useState(0),[hasFrame,setHasFrame]=useState(false),[connected,setConnected]=useState(false);
  useEffect(()=>{
   let disposed=false,ws:WebSocket|null=null,retry:ReturnType<typeof setTimeout>|undefined,watch:ReturnType<typeof setInterval>;
   let pending:Blob|null=null,decoding=false,count=0,start=performance.now(),receivedAt=performance.now(),attempt=0,generation=0,connecting=false,terminal=false,lastStreamError:string|null=null;
@@ -32,7 +32,7 @@ export default function LiveScreen({deviceId,apiKey,accessRevision,hideIndicator
     }
     const socket=new WebSocket(`ws://127.0.0.1:8765/api/devices/${encodeURIComponent(deviceId)}/stream`);ws=socket;socket.binaryType='blob';receivedAt=performance.now();
     socket.onopen=()=>{if(!disposed&&gen===generation)socket.send(JSON.stringify({token:apiKey,keepalive:true}));};
-    socket.onmessage=e=>{if(disposed||gen!==generation)return;if(e.data instanceof Blob){receivedAt=performance.now();lastStreamError=null;setStreamError('');pending=e.data;attempt=0;void draw(gen);}else{try{const d=JSON.parse(e.data);if(d.type==='ready'||d.type==='source')source.current=d.source==='native-usb'?'USB':d.source==='wda-screenshot'?'USB snapshots':'Compatible stream';if(d.type==='error'){terminal=d.retryable===false;lastStreamError=d.message;setStreamError(d.message);markOffline(d.message,terminal);}}catch{markOffline('Waiting for live phone video. Reconnecting…');}}};
+    socket.onmessage=e=>{if(disposed||gen!==generation)return;if(e.data instanceof Blob){receivedAt=performance.now();lastStreamError=null;pending=e.data;attempt=0;void draw(gen);}else{try{const d=JSON.parse(e.data);if(d.type==='ready'||d.type==='source')source.current=d.source==='native-usb'?'USB':d.source==='wda-screenshot'?'USB snapshots':'Compatible stream';if(d.type==='error'){terminal=d.retryable===false;lastStreamError=d.message;markOffline(d.message,terminal);}}catch{markOffline('Waiting for live phone video. Reconnecting…');}}};
     socket.onclose=()=>{if(disposed||gen!==generation)return;generation++;pending=null;ws=null;if(!terminal){markOffline(lastStreamError?`${lastStreamError} · Reconnecting…`:'Waiting for live phone video. Reconnecting…');retrySoon();}};
     socket.onerror=()=>socket.close();
    }catch(e){if(!disposed&&gen===generation){markOffline(`${(e as Error).name==='AbortError'?'The local API timed out':(e as Error).message} · Reconnecting…`);retrySoon();}}
@@ -43,9 +43,8 @@ export default function LiveScreen({deviceId,apiKey,accessRevision,hideIndicator
   window.addEventListener('online',wake);document.addEventListener('visibilitychange',wake);
   return()=>{disposed=true;generation++;pending=null;live.current=false;request?.abort();clearTimeout(retry);clearInterval(watch);ws?.close();window.removeEventListener('online',wake);document.removeEventListener('visibilitychange',wake);};
  },[deviceId,apiKey,accessRevision]);
- const displayStatus=status;
- return <><canvas {...canvasProps} ref={canvas} aria-label='Live phone screen' aria-disabled={!connected}
+  return <><canvas {...canvasProps} ref={canvas} aria-label='Live phone screen' aria-disabled={!connected}
  onPointerDown={e=>{if(live.current)canvasProps.onPointerDown?.(e);}} onPointerUp={e=>{if(live.current)canvasProps.onPointerUp?.(e);}}
  onKeyDown={e=>{if(live.current)canvasProps.onKeyDown?.(e);}}
- style={{visibility:hasFrame?'visible':'hidden',opacity:connected?1:.45,pointerEvents:connected?'auto':'none'}}/>{!connected&&<div className="live-placeholder" role="status">{displayStatus}{hasFrame&&<small>Last received frame. Waiting for live video.</small>}</div>}{!hideIndicator&&<span className="live-indicator">{connected?`● LIVE · ${fps||'…'} FPS · ${source.current}`:displayStatus}</span>}</>;
+ style={{visibility:hasFrame?'visible':'hidden',opacity:connected?1:.45,pointerEvents:connected?'auto':'none'}}/>{!connected&&<div className="live-placeholder" role="status">{status}{hasFrame&&<small>Last received frame. Waiting for live video.</small>}</div>}{!hideIndicator&&<span className="live-indicator">{connected?`● LIVE · ${fps||'…'} FPS · ${source.current}`:status}</span>}</>;
 }

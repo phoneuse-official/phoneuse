@@ -25,7 +25,7 @@ class Inventory:
         ident=device['SerialNumber']
         with self.guard:old=dict(self.items.get(ident,{}))
         info={}
-        if old.get('model') in (None,'Unknown') or time.time()-old.get('metadata_at',0)>600:
+        if old.get('model') in (None,'Unknown','\u672a\u77e5') or time.time()-old.get('metadata_at',0)>600:
             try:info={**device_info(device),'metadata_at':time.time()}
             except Exception:pass
         try:

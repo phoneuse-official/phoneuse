@@ -3,4 +3,7 @@ import os
 
 
 def setting(name, default=None):
-    return os.environ.get('PHONEUSE_' + name) or os.environ.get('QUNKONG_' + name) or default
+    for prefix in ('PHONEUSE_', 'QUNKONG_'):
+        if prefix + name in os.environ:
+            return os.environ[prefix + name] or default
+    return default

@@ -34,7 +34,9 @@ args=parser.parse_args()
 if args.command=='status':
     result=subprocess.run(['launchctl','print',DOMAIN+'/'+LABEL],capture_output=True,text=True)
     if result.returncode:
-        print('The background service is not loaded.')
+        legacy=subprocess.run(['launchctl','print',DOMAIN+'/'+LEGACY_LABEL],capture_output=True,text=True)
+        print(f'Only the older {LEGACY_LABEL} service is loaded. Run install to replace it.' if legacy.returncode==0
+              else 'The background service is not loaded.')
     else:
         for line in result.stdout.splitlines():
             if re.match(r'^\s*(state|pid|runs|last exit code) =',line):print(line.strip())
