@@ -1,18 +1,39 @@
 # Demo videos
 
-This page has the scripts for the demo videos in the [README](../README.md), a checklist for recording them,
-and the steps for adding a finished video.
+This page lists the recorded demo videos, read-only prompts you can try yourself, a checklist for recording
+new videos, and the steps for adding one to the [README](../README.md).
 
-Every demo only looks things up or reads the screen. None of them sends, buys, deletes or changes anything.
+## Recorded videos
+
+These are linked from the README's [Demo videos](../README.md#demo-videos) table. The files are stored on
+PhoneUse's video storage, not in this repository.
+
+| Video | What PhoneUse does | Size | Every frame checked |
+| --- | --- | --- | --- |
+| Overview | The 50-second launch video | 2.3 MB | Not yet |
+| TikTok | Browses the TikTok feed | 2.88 MB | Not yet |
+| Instagram | Watches Instagram Reels | 8.64 MB | Not yet |
+| Telegram | Sends a “good morning” message | 612.74 KB | Not yet |
+| Google Maps | Finds a Starbucks and shares it | 1.99 MB | Not yet |
+| GEICO | Sets up a renters insurance quote | 1.38 MB | Not yet |
+| Reddit | Browses Reddit and leaves a comment | 2.54 MB | Not yet |
+| Amazon | Reviews a Diet Coke order | 1.95 MB | Not yet |
+| DoorDash | Places an order and texts an update | 1.77 MB | Not yet |
+
+Some of these send a message, post a comment or place an order. Those are real actions on a real phone.
+Before the README goes live, check every frame of each video against the [checklist](#after-recording)
+and change **Not yet** to **Yes**.
+
+## Prompts to try yourself
+
+These prompts only look things up or read the screen. None of them sends, buys, deletes or changes anything,
+so they are a safe first test of your setup. They are also good scripts for more videos.
 
 > **Status:** none of these prompts has been tried on a physical iPhone for this launch yet.
-> Try each one before recording, and update the **Status** column below.
+> Update the **Status** column after you try one.
 
-## The demos
-
-| # | Demo | What it shows | Length | Status |
+| # | Prompt | What it shows | Length | Status |
 | --- | --- | --- | --- | --- |
-| Hero | Overview (use demo 3) | Prompt in, phone moves, answer out | 20–30 s | Not tried yet |
 | 1 | [Describe the screen](#1-describe-the-screen) | Reading the screen | 15–20 s | Not tried yet |
 | 2 | [Do a calculation](#2-do-a-calculation) | Tapping buttons in an app | 15–25 s | Not tried yet |
 | 3 | [Search the web](#3-search-the-web) | Typing, tapping and reading | 30–45 s | Not tried yet |
@@ -42,7 +63,7 @@ Every demo only looks things up or reads the screen. None of them sends, buys, d
 ### After recording
 
 - [ ] **Watch every frame** before uploading, and pause on fast parts. Look for device IDs (serial number, UDID, IMEI), notifications, contacts, names, email addresses, phone numbers, locations and the API key.
-- [ ] Trim the clip to the length in the table.
+- [ ] Trim the clip to under a minute; the prompt table gives a length for each script.
 - [ ] Save it as `.mp4` (H.264), which plays in every browser. Keep the file small so it starts quickly.
 - [ ] If the task fails or does something unexpected, do not use that take. Record again, or skip the demo and open an issue.
 
@@ -61,28 +82,24 @@ iPhone recordings include the status bar, so check it for notifications.
 
 Do not commit video files. `scripts/check-public-tree.py` fails on `.mp4`, `.jpg` and `.jpeg` files,
 on any binary file and on any file over 2 MB. The videos live in PhoneUse's Cloudflare R2 storage instead,
-and the README links to them. Clicking a link plays the whole video in the browser.
+served from PhoneUse's own web address, and the README links to them.
 
-1. Upload the `.mp4` to the public R2 bucket. Use clear file names, such as `demo-3-search-the-web.mp4`.
-   Serve the bucket from your own domain: Cloudflare says the default `r2.dev` link is rate-limited and meant only for testing.
-2. Also upload a still picture from the video (a `.png` or `.jpg` frame) with the same name, such as `demo-3-search-the-web.png`.
-   The README shows this picture, and clicking it opens the video.
-3. In `README.md`, find the matching comment, for example `<!-- VIDEO demo-3 ... -->`.
-   Replace the `_Video coming soon._` line under it with the picture and a text link:
+1. Upload the `.mp4` to the R2 bucket. Use a file name without spaces, such as `18-search-the-web.mp4`.
+   (Spaces work too, but each one must be written as `%20` in the link.)
+2. Copy its public link on PhoneUse's own domain. Do not use an `r2.dev` link: Cloudflare says those are
+   rate-limited and meant only for testing.
+3. Open the link in a private browser window. It must play without signing in.
+   If the browser downloads the file instead of playing it, set the file's content type to `video/mp4` in R2.
+4. Add a row to the **Demo videos** table in `README.md`:
 
    ```markdown
-   [![Watch: Search the web](https://YOUR-R2-DOMAIN/demo-3-search-the-web.png)](https://YOUR-R2-DOMAIN/demo-3-search-the-web.mp4)
-
-   [▶ Watch the video (40 s)](https://YOUR-R2-DOMAIN/demo-3-search-the-web.mp4)
+   | **App name** | What PhoneUse does. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/18-search-the-web.mp4) |
    ```
 
-4. Do the same for the hero clip in the `<!-- HERO VIDEO -->` slot at the top of the README.
-5. Open each link in a private browser window. It must play without signing in.
-   If the browser downloads the file instead of playing it, set the file's content type to `video/mp4` in R2.
-6. Mark the demo as **Recorded** in the table above.
+5. Add the same video to the [Recorded videos](#recorded-videos) table above.
 
 GitHub does not play videos from other sites inside the README. Its pages only play videos stored on GitHub,
-so an R2 video always opens on its own page.
+so clicking **▶ Watch** opens the video on its own page.
 
 **Every upload is public.** Anyone with the link can watch it, so check the video before you upload it.
 
@@ -104,8 +121,6 @@ so an R2 video always opens on its own page.
 - **Use another take if:** it taps the wrong keys or the answer is wrong.
 
 ### 3. Search the web
-
-This is also the **hero clip**: it shows typing, tapping and reading in one task.
 
 - **Before you start:** open Safari to an empty start page.
 - **Prompt:**

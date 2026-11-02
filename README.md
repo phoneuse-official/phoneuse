@@ -8,8 +8,7 @@
 Open-source tools for controlling a USB-connected iPhone from your Mac: a local web interface,
 live screen preview, natural-language prompts, REST API, and MCP server.
 
-<!-- HERO VIDEO: replace the next line with the overview clip's link. See docs/DEMOS.md, "How to add a video". -->
-_Demo video coming soon._
+**[▶ Watch the 50-second demo](https://YOUR-VIDEO-DOMAIN/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4)**
 
 Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).
 Want phones without managing hardware on your desk? [Explore PhoneUse →](https://phoneuse.com/?utm_source=github&utm_medium=readme_cta&utm_campaign=phoneuse-local)
@@ -31,68 +30,22 @@ Accessibility support varies by app. A task marked finished is a model-reported 
 
 ## Demo videos
 
-Every demo here only looks things up or reads the screen. Nothing is sent, bought, deleted or changed.
-After setup, you can try the same prompts yourself. Full scripts and recording rules: [docs/DEMOS.md](docs/DEMOS.md).
+Real tasks on a real iPhone, run by PhoneUse Local. Click **▶ Watch** to play a video in your browser.
 
-### 1. Describe the screen
+| App | What PhoneUse does | Video |
+| --- | --- | --- |
+| **Overview** | The 50-second launch demo. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4) |
+| **TikTok** | Browses the TikTok feed. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/02%20-%20TikTok%20Feed%20Browsing%20-%20PhoneUse%20launch.mp4) |
+| **Instagram** | Watches Instagram Reels. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/03%20-%20Instagram%20Reels%20-%20PhoneUse%20launch.mp4) |
+| **Telegram** | Sends a “good morning” message. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/05%20-%20Telegram%20Good%20Morning%20-%20PhoneUse%20launch.mp4) |
+| **Google Maps** | Finds a Starbucks and shares it. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/07%20-%20Google%20Maps%20Starbucks%20Share%20-%20PhoneUse%20launch.mp4) |
+| **GEICO** | Sets up a renters insurance quote. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/09%20-%20GEICO%20Renters%20Quote%20Setup%20-%20PhoneUse%20launch.mp4) |
+| **Reddit** | Browses Reddit and leaves a comment. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/15%20-%20Reddit%20Browsing%20and%20Comment%20-%20PhoneUse%20launch.mp4) |
+| **Amazon** | Reviews a Diet Coke order. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/16%20-%20Amazon%20Diet%20Coke%20Order%20Review%20-%20PhoneUse%20launch.mp4) |
+| **DoorDash** | Places an order and texts an update. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/17%20-%20DoorDash%20Order%20and%20Text%20Update%20-%20PhoneUse%20launch.mp4) |
 
-> Open Safari and describe the current screen. Do not submit anything.
-
-<!-- VIDEO demo-1: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 2. Do a calculation
-
-> Open Calculator and work out 128 × 46. Tell me the answer.
-
-<!-- VIDEO demo-2: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 3. Search the web
-
-> Open Safari, search for "easy hikes near San Francisco", and summarize the top three results. Do not sign in or fill in any forms.
-
-<!-- VIDEO demo-3: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 4. Look up a place
-
-> Open Maps, search for "Golden Gate Bridge", and tell me its address. Do not start directions.
-
-<!-- VIDEO demo-4: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 5. Browse the App Store
-
-> Open the App Store, search for "habit tracker", and list the top three apps with their ratings. Do not tap Get or install anything.
-
-<!-- VIDEO demo-5: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 6. Read the world clock
-
-> Open Clock, go to World Clock, and tell me which cities are listed and the time in each. Do not add or delete anything.
-
-<!-- VIDEO demo-6: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 7. Stop a task halfway
-
-Start a longer read-only task, then click **Stop task**. The phone stops; steps it already took are not undone.
-
-> Open Safari, search for "iPhone tips", and read me the title of every result on the first page.
-
-<!-- VIDEO demo-7: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
-
-### 8. Drive the phone from your AI agent (MCP)
-
-Connect your MCP client (see [API and MCP](#api-and-mcp)), then ask it:
-
-> List my phones, take a screenshot of the first one, and tell me what is on the screen.
-
-<!-- VIDEO demo-8: replace the next line with the video link. See docs/DEMOS.md, "How to add a video". -->
-_Video coming soon._
+> **Some of these demos send a message, post a comment or place an order.** Those are real actions on a real phone.
+> Watch the phone while a task runs, and start with the read-only prompts in [docs/DEMOS.md](docs/DEMOS.md).
 
 ## Requirements
 
