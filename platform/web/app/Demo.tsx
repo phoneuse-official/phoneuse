@@ -159,7 +159,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const task=await call<Task>('/api/ai/tasks','POST',{device_id:device,task:input.trim(),executor:'baseline',max_steps:30});
+      const task=await call<Task>('/api/ai/tasks','POST',{device_id:device,task:input.trim(),executor:'program',max_steps:30});
       setTasks(current=>[...current,task]);
       setInput('');
     }catch(caught){
@@ -182,7 +182,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const next=await call<Task>('/api/ai/tasks','POST',{device_id:task.device_id,task:task.task,executor:'baseline',max_steps:30});
+      const next=await call<Task>('/api/ai/tasks','POST',{device_id:task.device_id,task:task.task,executor:'program',max_steps:30});
       setTasks(current=>[...current,next]);
     }catch(caught){
       setError((caught as Error).message);
