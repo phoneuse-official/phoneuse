@@ -12,7 +12,7 @@ NATURAL_LANGUAGE_TITLE = (
 
 @pytest.fixture
 def demo(tmp_path, monkeypatch):
-    monkeypatch.setenv("QUNKONG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("PHONEUSE_STATE_DIR", str(tmp_path / "state"))
     for name in ("backend.demo", "backend.demo_invitation", "backend.service"):
         sys.modules.pop(name, None)
     return importlib.import_module("backend.demo")

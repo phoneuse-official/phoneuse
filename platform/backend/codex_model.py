@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from .config import setting
 from .ai_runner import SYSTEM, TOOL, prompt_history
 from . import phone_program
 
@@ -26,7 +27,7 @@ class CodexModel:
         self.progress=progress or (lambda **kw:None)
         config_path=Path(__file__).resolve().parents[1]/'.state/codex-config.json'
         config=json.loads(config_path.read_text()) if config_path.exists() else {}
-        self.executable=os.environ.get('QUNKONG_CODEX_BIN') or config.get('executable') or shutil.which('codex')
+        self.executable=setting('CODEX_BIN') or config.get('executable') or shutil.which('codex')
         if not self.executable:raise RuntimeError('Codex CLI is unavailable in API process PATH')
         self.deadline=time.monotonic()+300
 
@@ -54,12 +55,12 @@ class CodexModel:
         self.progress(stage='thinking')
         if self.cancel.is_set():raise RuntimeError('Task cancelled')
         prompt=self.build_prompt(messages)
-        with tempfile.TemporaryDirectory(prefix='qunkong-codex-') as tmp:
+        with tempfile.TemporaryDirectory(prefix='phoneuse-codex-') as tmp:
             schema=Path(tmp)/'schema.json';schema.write_text(json.dumps(SCHEMA))
             args=[self.executable,'exec','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only']
             for feature in ('shell_tool','unified_exec','apps','plugins','multi_agent'):args+=['--disable',feature]
             args+=['-c','agents.enabled=false','-c','web_search="disabled"','-c','project_doc_max_bytes=0','--json','--output-schema',str(schema),'-C',tmp,'-']
-            model=os.environ.get('QUNKONG_CODEX_MODEL')
+            model=setting('CODEX_MODEL')
             if model:args[2:2]=['-m',model]
             env={k:v for k,v in os.environ.items() if k in ('HOME','PATH','CODEX_HOME','TMPDIR','LANG','SSL_CERT_FILE','SSL_CERT_DIR')}
             env['PATH']=str(Path(self.executable).parent)+os.pathsep+env.get('PATH','/usr/bin:/bin')

@@ -27,7 +27,7 @@ export function PhonePanel({apiKey,device,devices,active,revision,onDeviceChange
     <div className="phone-stage">
       <div className="phone-frame">
         <div className="phone-screen">
-          {online?<LiveScreen deviceId={device} apiKey={apiKey} accessRevision={String(revision)} locale="en" hideIndicator className="phone-screen-canvas"/>:<div className="phone-empty"><Smartphone aria-hidden="true"/><strong>{selected?'Phone is offline':'Connect your iPhone'}</strong><span>{selected?'Unlock the iPhone and restart WebDriverAgent to reconnect.':'Connect a phone by USB to see its live screen here.'}</span></div>}
+          {online?<LiveScreen deviceId={device} apiKey={apiKey} accessRevision={String(revision)} hideIndicator className="phone-screen-canvas"/>:<div className="phone-empty"><Smartphone aria-hidden="true"/><strong>{selected?'Phone is offline':'Connect your iPhone'}</strong><span>{selected?'Unlock the iPhone and restart WebDriverAgent to reconnect.':'Connect a phone by USB to see its live screen here.'}</span></div>}
         </div>
       </div>
     </div>

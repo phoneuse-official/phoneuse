@@ -29,7 +29,7 @@ def user_for(digest):
     with database() as db:
         row = db.execute('SELECT * FROM credentials WHERE hash=?', (digest,)).fetchone()
     if not row or (row['expires'] is not None and row['expires']<=time.time()):
-        raise PermissionError('任务凭证已失效')
+        raise PermissionError('The API key for this job is no longer valid')
     return dict(row, devices=json.loads(row['devices']))
 
 
@@ -48,27 +48,27 @@ def get_job(owner, job_id):
     with database() as db:
         row = db.execute('SELECT * FROM jobs WHERE id=? AND owner=?', (job_id, owner['hash'])).fetchone()
     if not row:
-        raise ValueError('任务不存在或无权访问')
+        raise ValueError('Job not found or not accessible')
     return public_job(row)
 
 
 def submit(owner, kind, devices, payload, run_at=None):
     ids = list(dict.fromkeys(devices))
     if any(not allowed(owner, d) for d in ids):
-        raise PermissionError('任务包含无权访问的手机')
+        raise PermissionError('The job includes a phone this API key cannot access')
     payload = {**payload, 'scheduled': run_at is not None}
     now = time.time(); job_id = uuid.uuid4().hex
     with database() as db:
         db.execute('BEGIN IMMEDIATE')
         pending = db.execute("SELECT COUNT(*) FROM jobs WHERE owner=? AND status IN ('queued','running','cancelling')", (owner['hash'],)).fetchone()[0]
         if pending >= 20:
-            raise ValueError('待执行任务过多，最多20个')
+            raise ValueError('Too many pending jobs (maximum 20)')
         if 'asset_id' in payload:
             row = db.execute('SELECT kind,metadata FROM assets WHERE id=? AND owner=?', (payload['asset_id'], owner['hash'])).fetchone()
             if not row or (kind == 'install' and row['kind'] != 'ipa') or (kind == 'media' and row['kind'] not in ('photo', 'video')):
-                raise ValueError('文件类型不匹配或无权访问')
+                raise ValueError('The file type does not match, or the file is not accessible')
             if kind == 'install' and json.loads(row['metadata'])['bundle_id'] == assets.RUNNER:
-                raise ValueError('不能通过任务替换正在使用的控制代理')
+                raise ValueError('A job cannot replace the WebDriverAgent app that controls the phone')
         db.execute('INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                    (job_id, owner['hash'], kind, json.dumps(payload), json.dumps(ids), run_at or now,
                     'queued', '{}', 0, now, now))
@@ -95,7 +95,7 @@ class Scheduler:
             db.execute("UPDATE jobs SET status='interrupted',updated=? WHERE status IN ('running','cancelling')", (time.time(),))
             db.execute("UPDATE jobs SET status='missed',updated=? WHERE status='queued' AND run_at<?", (time.time(), time.time()-300))
         self.stop_event.clear()
-        self.thread = threading.Thread(target=self.loop, daemon=True, name='qunkong-scheduler')
+        self.thread = threading.Thread(target=self.loop, daemon=True, name='phoneuse-scheduler')
         self.thread.start()
 
     def stop(self):
@@ -124,11 +124,11 @@ class Scheduler:
 
     def check(self, job_id, digest, device):
         if self.stop_event.is_set():
-            raise Cancelled('节点停止，任务未继续')
+            raise Cancelled('The local API stopped; the job did not continue')
         with database() as db:
             row = db.execute('SELECT cancel FROM jobs WHERE id=?', (job_id,)).fetchone()
         if not row or row['cancel']:
-            raise Cancelled('已停止；当前已发出的操作不会撤销')
+            raise Cancelled('Stopped. Actions already sent to the phone are not undone')
         user = user_for(digest)
         controller.check_lease(user, device)
         return user
@@ -157,7 +157,7 @@ class Scheduler:
                 for cycle in range(payload.get('repeat', 1)):
                     for index, step in enumerate(steps):
                         if time.monotonic() > deadline:
-                            raise DeviceError('任务达到一小时运行上限')
+                            raise DeviceError('The job reached its one-hour limit')
                         user = self.check(job_id, digest, device)
                         controller.acquire(user, device, 900)
                         self.update_result(job_id, device, cycle=cycle + 1, step=index + 1, total=total)
@@ -198,7 +198,7 @@ class Scheduler:
                     finally:
                         with database() as db:
                             db.execute('INSERT INTO audit(time,owner,device,action,success,error) VALUES (?,?,?,?,?,?)',
-                                       (time.time(), digest, device, job['kind'], int(success), None if success else '任务失败，查看任务状态；勿自动重试'))
+                                       (time.time(), digest, device, job['kind'], int(success), None if success else 'Job failed. Check the job status; do not retry automatically'))
                 completed = 1
                 self.update_result(job_id, device, completed=1, percent=100)
             self.check(job_id, digest, device)

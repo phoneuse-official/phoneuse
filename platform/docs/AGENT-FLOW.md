@@ -56,7 +56,7 @@ screen values are not added to action metrics or persisted as new execution logs
 
 ## Validation
 
-Run device-free backend tests from `platform` with `QUNKONG_STATE_DIR` set to a temporary
+Run device-free backend tests from `platform` with `PHONEUSE_STATE_DIR` set to a temporary
 directory. Test field replacement, wrong focus/value, placeholder values, credential and
 secure inputs, stale handles, duplicate/missing targets, delayed pages, uncertain
 submissions, transport failures, recovery limits, and context fact retention.

@@ -36,7 +36,7 @@ async def lifespan(app):
         hub.close()
 
 
-app = FastAPI(lifespan=lifespan, title='群控 · iPhone API', version='0.1.0', description='Mac 真机接入节点。所有设备操作需要 API Key 和设备使用权。')
+app = FastAPI(lifespan=lifespan, title='PhoneUse Local API', version='0.1.0', description='Local API for USB-connected iPhones on this Mac. Every device action needs an API key and an active phone lease.')
 app.add_middleware(CORSMiddleware, allow_origins=['http://localhost:3109', 'http://127.0.0.1:3109'],
                    allow_methods=['GET', 'POST', 'DELETE'], allow_headers=['Authorization', 'Content-Type'])
 
@@ -46,14 +46,14 @@ async def local_security(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin not in ('http://localhost:3109', 'http://127.0.0.1:3109',
                                   'http://localhost:8765', 'http://127.0.0.1:8765'):
-        return JSONResponse({'detail': '不允许的来源'}, status_code=403)
+        return JSONResponse({'detail': 'Origin not allowed'}, status_code=403)
     try:
         size = int(request.headers.get('content-length', '0'))
     except ValueError:
-        return JSONResponse({'detail': '请求长度无效'}, status_code=400)
+        return JSONResponse({'detail': 'Invalid Content-Length'}, status_code=400)
     limit = 128 * 1024 * 1024 if request.url.path == '/api/assets' and request.method == 'POST' else 1024 * 1024
     if size < 0 or size > limit:
-        return JSONResponse({'detail': '请求过大'}, status_code=413)
+        return JSONResponse({'detail': 'Request too large'}, status_code=413)
     response = await call_next(request)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -66,7 +66,7 @@ bearer = HTTPBearer(auto_error=False)
 def owner(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
     user = authenticate(credentials.credentials if credentials else '')
     if user is None:
-        raise HTTPException(401, '需要有效的 API Key')
+        raise HTTPException(401, 'A valid API key is required')
     return user
 
 
@@ -102,7 +102,7 @@ class DeviceGroup(BaseModel):
     def valid_name(self):
         self.name = self.name.strip()
         if not self.name or self.name in ('.', '..') or any(ord(c) < 32 or c in '/\\' for c in self.name):
-            raise ValueError('分组名称不可为空或包含路径分隔符、控制字符')
+            raise ValueError('Group names cannot be empty or contain path separators or control characters')
         return self
 
 
@@ -117,7 +117,7 @@ def groups(user=Depends(owner)):
 def save_group(body: DeviceGroup, user=Depends(owner)):
     ids = list(dict.fromkeys(body.device_ids))
     if any(not allowed(user, d) for d in ids):
-        raise PermissionError('分组含无权访问的手机')
+        raise PermissionError('The group includes a phone this API key cannot access')
     with database() as db:
         db.execute('INSERT OR REPLACE INTO device_groups VALUES (?,?,?)', (user['hash'], body.name, json.dumps(ids)))
     return {'name': body.name, 'device_ids': ids}
@@ -169,7 +169,7 @@ def screenshot(device: str, user=Depends(owner)):
     try:
         data = base64.b64decode(value, validate=True)
     except (ValueError, TypeError):
-        raise DeviceError('手机返回的截图无效')
+        raise DeviceError('The phone returned an invalid screenshot')
     content_type = 'image/png' if data.startswith(b'\x89PNG') else 'image/jpeg'
     return Response(data, media_type=content_type)
 
@@ -216,14 +216,14 @@ async def stream(websocket: WebSocket, device: str):
         # Auth is in the first message, never in URLs or access logs.
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=5)
         if len(raw) > 2048:
-            raise PermissionError('认证消息过大')
+            raise PermissionError('Authentication message too large')
         auth = json.loads(raw)
         token = auth.get('token') if isinstance(auth, dict) else None
         if not isinstance(token, str):
-            raise PermissionError('需要有效的 API Key')
+            raise PermissionError('A valid API key is required')
         user = await asyncio.to_thread(authenticate, token)
         if not user:
-            raise PermissionError('需要有效的 API Key')
+            raise PermissionError('A valid API key is required')
         keepalive = auth.get('keepalive') is True
         await asyncio.to_thread(controller.check_lease, user, device)
         source = hub.subscribe(device)
@@ -242,7 +242,7 @@ async def stream(websocket: WebSocket, device: str):
             if time.monotonic() - last_auth > 1:
                 user = await asyncio.to_thread(authenticate, token)
                 if not user:
-                    raise PermissionError('凭证已失效')
+                    raise PermissionError('The API key is no longer valid')
                 last_auth = time.monotonic()
             await asyncio.to_thread(controller.check_lease, user, device)
             if keepalive and time.monotonic()-last_renew>=20:
@@ -294,9 +294,8 @@ def capabilities(user=Depends(owner)):
             'coordinates': 'normalized_0_to_1', 'screen_transport': 'authenticated_mjpeg_over_websocket',
             'recovery': 'usb_wda_supervision_with_backoff', 'workflows': 'record_edit_repeat_schedule_cancel', 'assets': ['ipa','photo','video'],
             'apps': 'list_install_uninstall', 'groups': 'credential_scoped_persistent', 'max_batch_devices': 20,
-            'scope': 'local prototype', 'parity_with_vendor': 'not_verified',
-            'pending': ['WebRTC remote video',
-                        'remote node relay', 'tenant portal', 'billing', 'vendor full feature inventory']}
+            'scope': 'local developer preview',
+            'pending': ['WebRTC remote video', 'remote node relay']}
 
 
 task_api.register_routes(app, owner)

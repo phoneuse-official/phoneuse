@@ -22,7 +22,7 @@ async def _operation(device, operation, value=None, progress=None):
             elif operation == 'uninstall':
                 apps = await proxy.get_apps(bundle_identifiers=[value])
                 if value == RUNNER or value not in apps or apps[value].get('ApplicationType') != 'User':
-                    raise DeviceError('仅可卸载存在的用户应用，不能卸载控制代理或系统应用')
+                    raise DeviceError('Only installed user apps can be removed; WebDriverAgent and system apps cannot')
                 await proxy.uninstall(value, handler=progress)
             return {'completed': True}
 
@@ -39,4 +39,4 @@ def operate(device, operation, value=None, progress=None):
         code = str(exc).split(':', 1)[0]
         code = code if re.fullmatch(r'[A-Za-z][A-Za-z0-9]{2,80}', code) else type(exc).__name__
         error = DeviceError if operation == 'list' or isinstance(exc, AppInstallError) else OutcomeUnknown
-        raise error(f'手机应用服务返回 {code}；若操作已开始，请查看手机实际状态，勿自动重试') from exc
+        raise error(f'The iPhone app service returned {code}. If the operation started, check the phone; do not retry automatically') from exc

@@ -12,4 +12,6 @@ WebDriverAgent, Codex and Xcode are obtained separately. No Apple developer imag
 third-party phone installer, vendor SDK binary, personal media, or runtime capture is included.
 
 The web lockfile pins a patched `fflate` 0.7.5 for Satori through an npm override.
-Remove the override when upstream dependencies adopt a patched release and audit remains clean.
+It also pins `minimatch` 11.0.4 for the shadcn CLI's `@ts-morph/common` (GHSA-g3hv-75wg-m249); the CLI is
+only used when adding UI components. Remove each override when upstream dependencies adopt a patched release
+and audit remains clean.

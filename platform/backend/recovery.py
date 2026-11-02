@@ -25,13 +25,13 @@ def initialize():
 
 def configure(user, device, enabled):
     if '*' not in user['devices']:
-        raise PermissionError('自动恢复设置仅限节点管理员')
+        raise PermissionError('Only the local administrator can change automatic recovery')
     if not device or len(device)>100 or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-' for c in device):
-        raise ValueError('设备标识无效')
+        raise ValueError('Invalid device identifier')
     with database() as db:
         db.execute('BEGIN IMMEDIATE')
         if not db.execute('SELECT 1 FROM recovery_devices WHERE device=?',(device,)).fetchone() and db.execute('SELECT COUNT(*) FROM recovery_devices').fetchone()[0]>=20:
-            raise ValueError('单节点最多管理20台手机')
+            raise ValueError('One Mac can manage at most 20 phones')
         db.execute('INSERT OR REPLACE INTO recovery_devices VALUES (?,?,?)',(device,int(enabled),time.time()))
     return {'device':device,'enabled':enabled}
 
@@ -59,7 +59,7 @@ class Supervisor:
         with database() as db:
             settings=db.execute('SELECT * FROM recovery_devices').fetchall()
         with self.guard:
-            return [{'device':r['device'],'enabled':bool(r['enabled']),**self.states.get(r['device'],{'phase':'pending' if r['enabled'] else 'disabled','detail':'等待健康检查'})} for r in settings if allowed(user,r['device'])]
+            return [{'device':r['device'],'enabled':bool(r['enabled']),**self.states.get(r['device'],{'phase':'pending' if r['enabled'] else 'disabled','detail':'Waiting for a health check'})} for r in settings if allowed(user,r['device'])]
 
     def terminate(self, device):
         with self.guard:
@@ -108,7 +108,7 @@ class Supervisor:
         with self.guard:
             state=dict(self.states.get(device,{}));process=self.children.get(device)
         if not config['enabled']:
-            self.state(device,'disabled','自动恢复已关闭；不会停止仍在运行的代理',generation=config['updated'])
+            self.state(device,'disabled','Automatic recovery is off; a running WDA is not stopped',generation=config['updated'])
             return
         if state.get('generation')!=config['updated']:
             state={'generation':config['updated'],'attempts':0,'failures':0,'next_retry':0}
@@ -118,7 +118,7 @@ class Supervisor:
             if controller.lock(device).acquire(blocking=False):
                 try:controller.sessions.pop(device,None)
                 finally:controller.lock(device).release()
-            self.state(device,'offline','等待 USB 重新连接',failures=0,healthy_since=0)
+            self.state(device,'offline','Waiting for USB to reconnect',failures=0,healthy_since=0)
             return
         try:
             healthy=wda_request(device,'GET','/status',timeout=3).get('value',{}).get('ready') is True
@@ -126,20 +126,20 @@ class Supervisor:
             healthy=False
         if healthy:
             since=state.get('healthy_since') or now
-            self.state(device,'ready','代理健康；自动恢复已启用',failures=0,healthy_since=since,
+            self.state(device,'ready','WDA is healthy; automatic recovery is on',failures=0,healthy_since=since,
                        attempts=0 if now-since>=30 else state.get('attempts',0),next_retry=0)
             return
         failures=state.get('failures',0)+1
         with self.guard:
             self.states[device].update(failures=failures,healthy_since=0)
         if device in controller.reservations:
-            self.state(device,'waiting_idle','任务仍在处理，等待任务结束后恢复代理')
+            self.state(device,'waiting_idle','A task is still running; WDA will be recovered after it ends')
             return
         if process and process.poll() is None and now-state.get('launched_at',0)<120:
-            self.state(device,'starting','代理正在启动，请保持手机解锁')
+            self.state(device,'starting','WDA is starting; keep the iPhone unlocked')
             return
         if failures<3:
-            self.state(device,'probing','正在复查代理连接，暂不重启')
+            self.state(device,'probing','Rechecking the WDA connection before restarting')
             return
         attempts=state.get('attempts',0)
         if attempts>=5:
@@ -147,17 +147,17 @@ class Supervisor:
             if not cooldown or now<cooldown:
                 self.terminate(device)
                 cooldown=cooldown or now+300
-                self.state(device,'needs_attention','恢复尚未完成，冷却后会自动继续；管理员请检查手机信任、开发者模式与代理',cooldown_until=cooldown,next_retry=cooldown)
+                self.state(device,'needs_attention','Recovery has not finished and will retry after a cooldown. Check that the iPhone trusts this Mac, Developer Mode is on and WDA is installed',cooldown_until=cooldown,next_retry=cooldown)
                 return
             attempts=0
             with self.guard:self.states[device].update(attempts=0,next_retry=0,cooldown_until=0)
             state['next_retry']=0
         if now<state.get('next_retry',0):
-            self.state(device,'retrying','等待下一次恢复尝试')
+            self.state(device,'retrying','Waiting for the next recovery attempt')
             return
         lock=controller.lock(device)
         if not lock.acquire(blocking=False):
-            self.state(device,'waiting_idle','手机正在执行操作，稍后恢复')
+            self.state(device,'waiting_idle','The iPhone is busy; recovery will run later')
             return
         reserved=False
         try:
@@ -168,12 +168,12 @@ class Supervisor:
             if self.stop_event.is_set():return
             self.spawn(device)
             attempts+=1
-            self.state(device,'starting','已启动代理恢复，请保持手机解锁',attempts=attempts,
+            self.state(device,'starting','WDA recovery started; keep the iPhone unlocked',attempts=attempts,
                        launched_at=now,next_retry=now+min(300,10*2**(attempts-1)))
         except DeviceError:
-            self.state(device,'waiting_idle','等待任务结束后恢复代理')
+            self.state(device,'waiting_idle','WDA will be recovered after the task ends')
         except OSError:
-            self.state(device,'retrying','无法启动本机代理进程，稍后重试',attempts=attempts+1,next_retry=now+30)
+            self.state(device,'retrying','Could not start the local WDA launcher; retrying soon',attempts=attempts+1,next_retry=now+30)
         finally:
             if reserved:controller.unreserve(device,'recovery')
             lock.release()
@@ -195,7 +195,7 @@ class Supervisor:
     def start(self):
         if self.thread and self.thread.is_alive():return
         self.stop_event.clear();self.started=time.time()
-        self.thread=threading.Thread(target=self.loop,daemon=True,name='qunkong-recovery');self.thread.start()
+        self.thread=threading.Thread(target=self.loop,daemon=True,name='phoneuse-recovery');self.thread.start()
 
     def stop(self):
         self.stop_event.set()
