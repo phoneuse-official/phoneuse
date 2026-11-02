@@ -201,7 +201,7 @@ For first-time setup, run the API in Terminal (step 3) instead, so you can see i
 | The phone menu says **Waiting for a phone**, or the phone is marked **Offline** | The phone is locked, not trusted, or not connected. | Unlock it, confirm it trusts this Mac, reconnect USB, and wait a few seconds. |
 | **Connect to your workspace** (asks for a key) | The page was opened directly, without the key. | Close the tab and run `Start PhoneUse.command`. |
 | **“API is unavailable…”** when starting the page | The API is not running. | Start it with `./platform/start-api.sh` ([step 3](#3-start-the-local-api)), or install the [login service](#optional-start-the-api-automatically-at-login). |
-| The page shows a different checkout, or the API reports a port conflict | Ports 8765 (API) and 3109 (web) are fixed. Another PhoneUse install already using 8765 blocks this one, and the launcher connects to whatever is already running on those ports. | Stop the other install, then restart the API and the page. |
+| The page shows a different checkout, or the API reports a port conflict | Ports 8765 (API) and 3109 (web) are fixed. Another PhoneUse install already using 8765 blocks this one, and the launcher connects to whatever is already running on those ports. | See what is using the port with `lsof -nP -iTCP:8765 -sTCP:LISTEN`. Stop that copy yourself, then restart the API and the page. |
 | Prompts fail with a Codex error | The Codex CLI is not signed in, not found, or out of quota. | Run `codex login status`, then see [Turn on natural-language tasks](#turn-on-natural-language-tasks). |
 
 Where to look: API output is in the Terminal running `start-api.sh`; web app errors are in `platform/.state/recording-web.log`.
@@ -236,7 +236,7 @@ The raw API and manual controls can perform real actions. Supervise use on perso
 
 - **REST API:** interactive docs at **http://127.0.0.1:8765/docs** while the API is running. Every request needs `Authorization: Bearer <key>`.
 - **MCP:** start the API, then set your MCP client to run the absolute path of `platform/start-mcp.sh` from this checkout. It reads the local key for you. MCP gives your agent the manual phone controls (list phones, screenshots, on-screen elements, tap, type, apps) and does not need Codex.
-- **Client setup:** see [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for MCP client configs.
+- **Client setup:** [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) has ready-to-copy MCP configs for Claude Code, Claude Desktop, Cursor and Codex, plus REST examples.
 - **A separate key for a script:** `create-key.py` makes a key limited to the phones you name and prints it once:
   `(cd platform && ../.venv/bin/python create-key.py --name my-script --device YOUR_DEVICE_UDID)`
 
@@ -251,12 +251,13 @@ All settings are optional environment variables.
 | `PHONEUSE_CODEX_BIN` | API | Full path to the Codex CLI, if the API cannot find it. |
 | `PHONEUSE_CODEX_MODEL` | API | Codex model to use. It must be available to your account. |
 | `PHONEUSE_STATE_DIR` | API, MCP | Folder for keys, history and logs. Default `platform/.state`. Mainly for tests. |
+| `PHONEUSE_WDA_BUNDLE_ID` | API, `start-wda.py` | Bundle ID of your signed WebDriverAgent runner. See the [iPhone setup guide](platform/docs/SETUP.md). |
 | `PHONEUSE_API_URL` | MCP | API address. Default `http://127.0.0.1:8765`. |
 | `PHONEUSE_TOKEN_FILE` | MCP | File that holds the key. Default `admin-token` in the state folder. |
 | `PHONEUSE_API_KEY` | MCP | The key itself, instead of the file. |
 | `PHONEUSE_AI_API_KEY` | `backend/ai_runner.py` | Model key for the experimental command-line runner only. The web app does not use it. |
 
-Keep keys in private client configuration; never commit them.
+Keep keys in private client configuration; never commit them. More examples: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ## Privacy and local data
 
