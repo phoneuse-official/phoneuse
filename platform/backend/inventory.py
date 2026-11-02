@@ -5,16 +5,17 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from .config import setting
 from .usb import list_usb, device_info, wda_request
 
 class Inventory:
     def __init__(self):
         self.guard=threading.RLock();self.items={};self.pending={};self.last_probe={};self.stop_event=threading.Event();self.thread=None
-        state=Path(os.environ.get('QUNKONG_STATE_DIR',Path(__file__).resolve().parents[1]/'.state'))
+        state=Path(setting('STATE_DIR') or Path(__file__).resolve().parents[1]/'.state')
         self.path=state/'devices-cache.json'
         try:
             for item in json.loads(self.path.read_text()):
-                self.items[item['id']]={**item,'online':None,'automation':'checking','detail':'正在检查设备连接'}
+                self.items[item['id']]={**item,'online':None,'automation':'checking','detail':'Checking the device connection'}
         except (OSError,ValueError,TypeError,KeyError):pass
 
     def snapshot(self):
@@ -24,14 +25,14 @@ class Inventory:
         ident=device['SerialNumber']
         with self.guard:old=dict(self.items.get(ident,{}))
         info={}
-        if old.get('model') in (None,'未知') or time.time()-old.get('metadata_at',0)>600:
+        if old.get('model') in (None,'Unknown') or time.time()-old.get('metadata_at',0)>600:
             try:info={**device_info(device),'metadata_at':time.time()}
             except Exception:pass
         try:
             status=wda_request(ident,'GET','/status',timeout=2).get('value') or {}
             health={'automation':'ready' if status.get('ready') is True else 'not_running','wda':status.get('build',{}).get('version'),'detail':''}
         except Exception:
-            health={'automation':'not_running','detail':'代理连接暂不可用，正在恢复'}
+            health={'automation':'not_running','detail':'WDA is not reachable yet; recovering'}
         with self.guard:
             current=self.items.get(ident,{})
             if current.get('usb_id')==generation and current.get('online'):
@@ -41,10 +42,10 @@ class Inventory:
         now=time.time();online={d['SerialNumber'] for d in devices}
         with self.guard:
             for ident,item in self.items.items():
-                if ident not in online:item.update(online=False,automation='offline',detail='USB 已断开，等待重新连接')
+                if ident not in online:item.update(online=False,automation='offline',detail='USB disconnected; waiting to reconnect')
             for d in devices:
                 ident=d['SerialNumber'];old=self.items.get(ident,{})
-                self.items[ident]={**{'id':ident,'name':'iPhone','model':'未知','ios':'未知','automation':'checking'},**old,
+                self.items[ident]={**{'id':ident,'name':'iPhone','model':'Unknown','ios':'Unknown','automation':'checking'},**old,
                                   'online':True,'connection':'USB','usb_id':d['DeviceID'],'seen_at':now}
                 if (not self.pending.get(ident) or self.pending[ident].done()) and now-self.last_probe.get(ident,0)>4:
                     self.last_probe[ident]=now;self.pending[ident]=pool.submit(self.probe,d,d['DeviceID'])

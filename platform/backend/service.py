@@ -11,11 +11,12 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
+from .config import setting
 from .inventory import inventory as device_cache
 from .native_capture import binding_for
 from .usb import DeviceError, device_info, list_usb, wda_request
 
-STATE = Path(os.environ.get('QUNKONG_STATE_DIR', Path(__file__).resolve().parents[1] / '.state'))
+STATE = Path(setting('STATE_DIR') or Path(__file__).resolve().parents[1] / '.state')
 STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
 DB = STATE / 'platform.sqlite3'
 
@@ -51,7 +52,7 @@ def initialize():
         fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as f:
             f.write(token)
-        add_key(token, '本机管理员', ['*'])
+        add_key(token, 'Local administrator', ['*'])
 
 
 def add_key(token, name, devices, expires=None):
@@ -104,44 +105,44 @@ class Controller:
 
     def expiry(self, owner, seconds):
         expires=min(time.time()+seconds,owner.get('expires') or float('inf'))
-        if expires<=time.time():raise PermissionError('凭证使用期已结束')
+        if expires<=time.time():raise PermissionError('This API key has expired')
         return expires
 
     def view(self, owner, device):
-        if not allowed(owner,device):raise PermissionError('无权访问这台手机')
+        if not allowed(owner,device):raise PermissionError('This API key cannot access this phone')
         with database() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT 1 FROM viewer_blocks WHERE owner=? AND device=?',(owner['hash'],device)).fetchone():
-                raise LeaseError('已主动释放使用权，请点击连接后恢复')
+                raise LeaseError('Screen access was released. Click Reconnect screen to resume')
             current=db.execute('SELECT * FROM leases WHERE device=?',(device,)).fetchone()
             if current and current['expires']>time.time() and current['owner']!=owner['hash']:
-                raise LeaseError('手机已由其他用户使用')
+                raise LeaseError('Another user is using this phone')
             if not current or current['expires']<=time.time():
-                if not any(d['id']==device for d in self.device_provider()):raise DeviceError('等待设备发现')
+                if not any(d['id']==device for d in self.device_provider()):raise DeviceError('Waiting for device discovery')
             expires=self.expiry(owner,900)
             db.execute('INSERT OR REPLACE INTO leases VALUES (?,?,?)',(device,owner['hash'],expires))
         return {'device':device,'expires':expires}
 
     def renew_view(self, owner, device):
-        if not allowed(owner,device):raise PermissionError('无权访问这台手机')
+        if not allowed(owner,device):raise PermissionError('This API key cannot access this phone')
         with database() as db:
             db.execute('BEGIN IMMEDIATE')
             row=db.execute('SELECT * FROM leases WHERE device=?',(device,)).fetchone()
-            if not row or row['owner']!=owner['hash'] or row['expires']<=time.time():raise LeaseError('使用权已结束')
+            if not row or row['owner']!=owner['hash'] or row['expires']<=time.time():raise LeaseError('Phone access has ended')
             expires=self.expiry(owner,900)
             db.execute('UPDATE leases SET expires=? WHERE device=? AND owner=?',(expires,device,owner['hash']))
         return {'expires':expires}
 
     def acquire(self, owner, device, seconds=300):
         if not allowed(owner, device):
-            raise PermissionError('无权访问这台手机')
+            raise PermissionError('This API key cannot access this phone')
         if not any(d['SerialNumber'] == device for d in list_usb()):
-            raise DeviceError('手机已离线')
+            raise DeviceError('The phone is offline')
         with database() as db:
             db.execute('BEGIN IMMEDIATE')
             current = db.execute('SELECT * FROM leases WHERE device=?', (device,)).fetchone()
             if current and current['expires'] > time.time() and current['owner'] != owner['hash']:
-                raise LeaseError('手机已被其他用户占用')
+                raise LeaseError('Another user is using this phone')
             expires = self.expiry(owner,seconds)
             db.execute('DELETE FROM viewer_blocks WHERE owner=? AND device=?',(owner['hash'],device))
             db.execute('INSERT OR REPLACE INTO leases VALUES (?,?,?)', (device, owner['hash'], expires))
@@ -156,25 +157,25 @@ class Controller:
     def check_lease(self, owner, device):
         self.expiry(owner,1)
         if not allowed(owner, device):
-            raise PermissionError('无权访问这台手机')
+            raise PermissionError('This API key cannot access this phone')
         with database() as db:
             lease = db.execute('SELECT * FROM leases WHERE device=?', (device,)).fetchone()
         if not lease or lease['owner'] != owner['hash'] or lease['expires'] <= time.time():
-            raise LeaseError('请先获取或续期手机使用权')
+            raise LeaseError('Acquire or renew phone access first')
 
     def session(self, device):
         if device not in self.sessions:
             result = wda_request(device, 'POST', '/session', {'capabilities': {'alwaysMatch': {}}})
             sid = result.get('sessionId') or result.get('value', {}).get('sessionId')
             if not sid:
-                raise DeviceError('WDA 未返回会话标识')
+                raise DeviceError('WDA did not return a session ID')
             self.sessions[device] = sid
         return '/session/' + quote(self.sessions[device], safe='')
 
     def reserve(self, device, job):
         with self.guard:
             if device in self.reservations:
-                raise LeaseError('手机正在执行任务')
+                raise LeaseError('The phone is running a task')
             self.reservations[device] = job
 
     def unreserve(self, device, job):
@@ -185,7 +186,7 @@ class Controller:
     def check_reservation(self, device, job=None):
         with self.guard:
             if device in self.reservations and self.reservations[device] != job:
-                raise LeaseError('手机正在执行任务，请先停止任务再手动操作')
+                raise LeaseError('The phone is running a task. Stop the task before controlling it manually')
 
     def perform(self, owner, device, action, params, job=None):
         # Screenshots and state reads stay available during automation.
@@ -231,12 +232,12 @@ class Controller:
                 try:
                     return base64.b64decode(value, validate=True).decode('utf-8')
                 except (ValueError, TypeError, UnicodeError):
-                    raise DeviceError('手机返回的剪贴板文字无效')
+                    raise DeviceError('The phone returned invalid clipboard text')
             return value
         # Element handles are bound to the issuing session; never rebind or replay them.
         if action in ('element_state', 'element_click','element_input_state','element_fill','element_submit_search'):
             if self.sessions.get(device) != p['session_id']:
-                raise DeviceError('元素会话已失效，请重新查询元素')
+                raise DeviceError('The element session has expired. Find the element again')
             root = '/session/' + quote(p['session_id'], safe='')
             element = root + '/element/' + quote(p['element_id'], safe='')
             displayed = wda_request(device, 'GET', element + '/displayed').get('value')
@@ -273,7 +274,7 @@ class Controller:
                 return {'status':'submitted'}
             if action == 'element_click':
                 if displayed is not True or enabled is not True:
-                    raise DeviceError('元素不可见或未启用，未执行点击')
+                    raise DeviceError('The element is hidden or disabled; nothing was tapped')
                 # This is a precheck, not a guarantee against overlays or subsequent UI changes.
                 return wda_request(device, 'POST', element + '/click', {}).get('value')
             rect = wda_request(device, 'GET', element + '/rect').get('value')
@@ -291,14 +292,14 @@ class Controller:
             found = wda_request(device, 'POST', root + '/elements',
                                 {'using': 'accessibility id', 'value': p['query']}).get('value')
             if not isinstance(found, list):
-                raise DeviceError('手机返回的元素列表无效')
+                raise DeviceError('The phone returned an invalid element list')
             elements = []
             for item in found:
                 if not isinstance(item, dict):
-                    raise DeviceError('手机返回的元素标识无效')
+                    raise DeviceError('The phone returned an invalid element ID')
                 ident = item.get('element-6066-11e4-a52e-4f735466cecf') or item.get('ELEMENT')
                 if not isinstance(ident, str) or not ident:
-                    raise DeviceError('手机返回的元素标识无效')
+                    raise DeviceError('The phone returned an invalid element ID')
                 elements.append({'element_id': ident, 'session_id': self.sessions[device]})
             return {'elements': elements, 'count': len(elements)}
         if action == 'alert_text':

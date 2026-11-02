@@ -7,13 +7,14 @@ import struct
 import subprocess
 import time
 from pathlib import Path
+from .config import setting
 from .usb import DeviceError
 
 ROOT=Path(__file__).resolve().parents[1]
 MAX_FRAME=8*1024*1024
 
 def binding_for(device):
-    state=Path(os.environ.get('QUNKONG_STATE_DIR',ROOT/'.state'))
+    state=Path(setting('STATE_DIR') or ROOT/'.state')
     try:
         bindings=json.loads((state/'native-capture.json').read_text())
         target=bindings.get(device)
@@ -32,10 +33,10 @@ class FrameDecoder:
             if self.length is None:
                 if len(self.pending)<4:return
                 self.length=struct.unpack('!I',self.pending[:4])[0];del self.pending[:4]
-                if not 4<=self.length<=MAX_FRAME:raise DeviceError('原生视频帧长度无效')
+                if not 4<=self.length<=MAX_FRAME:raise DeviceError('Invalid native video frame length')
             if len(self.pending)<self.length:return
             frame=bytes(self.pending[:self.length]);del self.pending[:self.length];self.length=None
-            if not frame.startswith(b'\xff\xd8') or not frame.endswith(b'\xff\xd9'):raise DeviceError('原生视频帧损坏')
+            if not frame.startswith(b'\xff\xd8') or not frame.endswith(b'\xff\xd9'):raise DeviceError('Native video frame is corrupt')
             yield frame
 
 
@@ -57,11 +58,11 @@ def frames(device, target, stopped):
                     except BlockingIOError:pass
                 events=selector.select(timeout=.5)
                 if not events:
-                    if time.monotonic()-last_frame>12:raise DeviceError('原生USB视频等待超时，正在恢复')
+                    if time.monotonic()-last_frame>12:raise DeviceError('Native USB video timed out; recovering')
                     continue
                 try:data=os.read(process.stdout.fileno(),65536)
                 except BlockingIOError:continue
-                if not data:raise DeviceError('原生USB屏幕采集已退出，正在恢复')
+                if not data:raise DeviceError('Native USB screen capture exited; recovering')
                 for frame in decoder.feed(data):
                     last_frame=time.monotonic()
                     yield frame

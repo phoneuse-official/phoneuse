@@ -19,10 +19,10 @@ def read_frame(stream):
     while True:
         line = stream.readline(8193)
         if not line:
-            raise DeviceError('视频流已断开')
+            raise DeviceError('Video stream disconnected')
         total += len(line)
         if total > 8192:
-            raise DeviceError('视频帧头过大')
+            raise DeviceError('Video frame header too large')
         line = line.strip()
         if not line:
             if length is not None:
@@ -32,12 +32,12 @@ def read_frame(stream):
             try:
                 length = int(line.split(b':', 1)[1].strip())
             except ValueError:
-                raise DeviceError('视频帧长度无效')
+                raise DeviceError('Invalid video frame length')
             if not 4 <= length <= MAX_FRAME:
-                raise DeviceError('视频帧长度超过限制')
+                raise DeviceError('Video frame exceeds the size limit')
     data = stream.read(length)
     if len(data) != length or not data.startswith(b'\xff\xd8') or not data.endswith(b'\xff\xd9'):
-        raise DeviceError('视频帧损坏或截断')
+        raise DeviceError('Video frame is corrupt or truncated')
     return data
 
 
@@ -69,7 +69,7 @@ class FrameSource:
             if self.error:
                 raise DeviceError(self.error)
             if self.stopped.is_set():
-                raise DeviceError('视频流已关闭')
+                raise DeviceError('Video stream closed')
             if self.seq == last_seq:
                 return None
             return self.seq, self.frame, self.received_at
@@ -79,7 +79,7 @@ class FrameSource:
         try:
             device = next((d for d in list_usb() if d['SerialNumber'] == self.device), None)
             if not device:
-                raise DeviceError('手机已离线')
+                raise DeviceError('The phone is offline')
             if self.native_target:
                 try:
                     for frame in native_frames(self.device,self.native_target,self.stopped):
@@ -99,7 +99,7 @@ class FrameSource:
                 response = http.client.HTTPResponse(sock)
                 response.begin()
                 if response.status != 200 or 'multipart/' not in response.getheader('Content-Type', ''):
-                    raise DeviceError('手机没有提供 MJPEG 视频流')
+                    raise DeviceError('The phone did not provide an MJPEG video stream')
                 threading.Thread(target=self._configure,daemon=True).start()
                 while not self.stopped.is_set():
                     self.publish(read_frame(response))
@@ -116,7 +116,7 @@ class FrameSource:
                 self._run_screenshots()
         except Exception as exc:
             with self.condition:
-                self.error = str(exc) if isinstance(exc, DeviceError) else '视频连接中断，请重连'
+                self.error = str(exc) if isinstance(exc, DeviceError) else 'Video connection interrupted; reconnect'
                 self.condition.notify_all()
         finally:
             if response is not None:
@@ -140,13 +140,13 @@ class FrameSource:
             finally:
                 lock.release()
             if not isinstance(value,str) or len(value)>((MAX_FRAME+2)//3)*4:
-                raise DeviceError('手机返回的屏幕截图无效或过大')
+                raise DeviceError('The phone returned an invalid or oversized screenshot')
             try:
                 frame=base64.b64decode(value,validate=True)
             except (ValueError,TypeError):
-                raise DeviceError('手机返回的屏幕截图无效')
+                raise DeviceError('The phone returned an invalid screenshot')
             if not 4<=len(frame)<=MAX_FRAME or not (frame.startswith(b'\xff\xd8') and frame.endswith(b'\xff\xd9') or frame.startswith(b'\x89PNG\r\n\x1a\n')):
-                raise DeviceError('手机返回的屏幕截图格式无效')
+                raise DeviceError('The phone returned a screenshot in an invalid format')
             self.publish(frame)
             self.stopped.wait(.5)
 
@@ -192,7 +192,7 @@ class StreamHub:
                 entry[0].stop();self.sources.pop(device);entry=None
             if entry is None:
                 self.sources[device]=entry=[FrameSource(device),0]
-            if entry[1]>=MAX_SUBSCRIBERS:raise DeviceError(f'同一手机最多允许{MAX_SUBSCRIBERS}个视频连接，请关闭不使用的观看页面')
+            if entry[1]>=MAX_SUBSCRIBERS:raise DeviceError(f'At most {MAX_SUBSCRIBERS} video connections are allowed per phone. Close viewer tabs you are not using')
             entry[1]+=1
             return entry[0]
 

@@ -37,10 +37,10 @@ class Action(BaseModel):
                   'terminate_app': ['bundle_id'], 'open_url': ['url'], 'set_orientation': ['orientation']}
         for field in fields.get(self.action, []):
             if getattr(self, field) is None:
-                raise ValueError(f'{self.action} 需要 {field}')
+                raise ValueError(f'{self.action} requires {field}')
         if self.action in ('element_fill','element_submit_search') and (
             not self.text or len(self.text)>2000 or any(ord(c)<32 or ord(c)==127 for c in self.text)):
             raise ValueError('Targeted input requires nonempty single-line text, up to 2000 characters')
         if self.action == 'pinch' and not (0.2 <= self.x <= 0.8 and 0.2 <= self.y <= 0.8):
-            raise ValueError('缩放中心需在屏幕 20%–80% 范围内，为双指手势保留空间')
+            raise ValueError('The pinch center must be within 20%–80% of the screen to leave room for two fingers')
         return self

@@ -27,7 +27,7 @@ function codexAgentPrompt(issue:'path'|'login'){
 
 Check whether the official Codex CLI is installed and whether it is signed in. If it is missing, use only OpenAI’s official Codex CLI installation instructions. If sign-in is needed, run codex login and pause so I can complete any browser-based sign-in myself. Never ask me to paste credentials, and do not read, print, or copy credential files.
 
-Make the CLI available to the local PhoneUse API. If needed, set QUNKONG_CODEX_BIN to the CLI’s absolute path and restart only the PhoneUse API after confirming which process belongs to this app. Do not stop unrelated services. Verify codex login status and the local API health endpoint afterward.
+Make the CLI available to the local PhoneUse API. If needed, set PHONEUSE_CODEX_BIN to the CLI’s absolute path and restart only the PhoneUse API after confirming which process belongs to this app. Do not stop unrelated services. Verify codex login status and the local API health endpoint afterward.
 
 Do not interact with the connected phone, submit phone actions, change project files, or expose tokens. Tell me when setup is complete so I can retry my prompt in PhoneUse.`;
 }
@@ -77,8 +77,8 @@ export default function Demo(){
     if(fragment)history.replaceState(null,'',location.pathname+location.search);
     let savedKey=fragment||'';
     try{
-      if(savedKey)sessionStorage.setItem('qunkong-api-key',savedKey);
-      else savedKey=sessionStorage.getItem('qunkong-api-key')||'';
+      if(savedKey)sessionStorage.setItem('phoneuse-api-key',savedKey);
+      else savedKey=sessionStorage.getItem('phoneuse-api-key')||'';
     }catch{}
     setKey(savedKey);
   },[]);
@@ -94,7 +94,7 @@ export default function Demo(){
 
   useEffect(()=>{
     const expired=()=>{
-      try{sessionStorage.removeItem('qunkong-api-key');}catch{}
+      try{sessionStorage.removeItem('phoneuse-api-key');}catch{}
       setKey('');
       setDevice('');
       setDevices([]);
@@ -105,8 +105,8 @@ export default function Demo(){
       setHistoryReady(false);
       setError('Your local API key expired. Reopen PhoneUse with Start PhoneUse.command.');
     };
-    window.addEventListener('qunkong-auth-expired',expired);
-    return()=>window.removeEventListener('qunkong-auth-expired',expired);
+    window.addEventListener('phoneuse-auth-expired',expired);
+    return()=>window.removeEventListener('phoneuse-auth-expired',expired);
   },[]);
 
   async function call<T>(path:string,method='GET',body?:unknown):Promise<T>{
@@ -117,7 +117,7 @@ export default function Demo(){
       signal:AbortSignal.timeout(12000),
     });
     const data=await response.json() as T&{detail?:string};
-    if(response.status===401)window.dispatchEvent(new Event('qunkong-auth-expired'));
+    if(response.status===401)window.dispatchEvent(new Event('phoneuse-auth-expired'));
     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:`Request failed (${response.status})`);
     return data;
   }
@@ -296,7 +296,7 @@ export default function Demo(){
   function connect(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
     const nextKey=draft.trim();
-    try{sessionStorage.setItem('qunkong-api-key',nextKey);}catch{}
+    try{sessionStorage.setItem('phoneuse-api-key',nextKey);}catch{}
     setKey(nextKey);
     setDraft('');
   }
@@ -368,7 +368,7 @@ export default function Demo(){
                   {setup&&<div className="codex-setup" role="status">
                     <strong>{setup==='path'?'Connect the Codex CLI':'Sign in to Codex'}</strong>
                     <p>{setup==='path'?'In Terminal, install the Codex CLI if needed, then sign in with':'In Terminal, sign in with'} <code>codex login</code> and finish the sign-in flow. Credentials stay with the Codex CLI; do not paste them into PhoneUse.</p>
-                    {setup==='path'&&<p>If the API still cannot find the CLI, stop it and restart from the repository root with <code>QUNKONG_CODEX_BIN="$(command -v codex)" ./platform/start-api.sh</code>.</p>}
+                    {setup==='path'&&<p>If the API still cannot find the CLI, stop it and restart from the repository root with <code>PHONEUSE_CODEX_BIN="$(command -v codex)" ./platform/start-api.sh</code>.</p>}
                     {!task.device_calls&&<Button type="button" variant="outline" size="sm" disabled={busy||Boolean(active)||!tasks.some(item=>item.id===task.id)} onClick={()=>void retryTask(task)}>I’ve signed in — retry this prompt</Button>}
                     <details><summary>Ask your agent to set this up</summary><p>Copy this prompt into your coding agent. It will guide setup without asking you to share credentials.</p><pre>{codexAgentPrompt(setup)}</pre><Button type="button" variant="outline" size="sm" onClick={()=>void copySetupPrompt(setup)}>{copiedSetupPrompt===setup?<Check aria-hidden="true"/>:null}{copiedSetupPrompt===setup?'Prompt copied':'Copy setup prompt'}</Button></details>
                   </div>}

@@ -20,7 +20,7 @@ class Step(BaseModel):
     @model_validator(mode='after')
     def recordable(self):
         if self.command.action in ('screenshot', 'source', 'clipboard_get', 'status', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'alert_text', 'source_fast', 'find_elements', 'element_state', 'element_click'):
-            raise ValueError('工作流不接受读取步骤或临时元素句柄；请使用独立接口')
+            raise ValueError('Workflows cannot contain read steps or temporary element handles; use the dedicated endpoints')
         return self
 
 
@@ -34,7 +34,7 @@ class Workflow(BaseModel):
     def name_valid(self):
         self.name = self.name.strip()
         if not self.name:
-            raise ValueError('请输入工作流名称')
+            raise ValueError('Enter a workflow name')
         return self
 
 
@@ -55,11 +55,11 @@ class Task(BaseModel):
     def valid(self):
         required = {'workflow': self.workflow_id, 'install': self.asset_id, 'media': self.asset_id, 'uninstall': self.bundle_id}
         if not required[self.kind]:
-            raise ValueError('任务缺少对应工作流、文件或应用')
+            raise ValueError('The job is missing its workflow, file or app')
         if self.kind == 'uninstall' and (not self.confirm_uninstall or self.bundle_id == assets.RUNNER):
-            raise ValueError('卸载会删除应用及其数据，需明确 confirm_uninstall；控制代理不可卸载')
+            raise ValueError('Uninstalling deletes the app and its data, so set confirm_uninstall. WebDriverAgent cannot be uninstalled')
         if self.run_at is not None and not time.time() - 5 <= self.run_at <= time.time() + 30 * 86400:
-            raise ValueError('定时须在未来30天内')
+            raise ValueError('The scheduled time must be within the next 30 days')
         return self
 
 
@@ -86,7 +86,7 @@ def register_routes(app, owner):
     @app.post('/api/assets')
     async def upload(request: Request, filename: str, user=Depends(owner)):
         if not filename or len(filename) > 200 or '/' in filename or '\\' in filename or any(ord(c) < 32 for c in filename):
-            raise ValueError('文件名无效')
+            raise ValueError('Invalid file name')
         asset_id = uuid.uuid4().hex; path = assets.asset_path(asset_id)
         size = 0
         async with upload_slots:
@@ -97,10 +97,10 @@ def register_routes(app, owner):
                         async for chunk in request.stream():
                             size += len(chunk)
                             if size > assets.MAX_UPLOAD:
-                                raise HTTPException(413, '单个文件最大128 MB，图片和视频最大50 MB')
+                                raise HTTPException(413, 'Files can be up to 128 MB; photos and videos up to 50 MB')
                             await asyncio.to_thread(target.write, chunk)
                 if not size:
-                    raise ValueError('文件为空')
+                    raise ValueError('The file is empty')
                 registration = asyncio.create_task(asyncio.to_thread(assets.register, user, asset_id, filename, size))
                 try:
                     result = await asyncio.shield(registration)
@@ -124,7 +124,7 @@ def register_routes(app, owner):
             db.execute('BEGIN IMMEDIATE')
             active = db.execute("SELECT payload FROM jobs WHERE status IN ('queued','running','cancelling')").fetchall()
             if any(json.loads(r['payload']).get('asset_id') == asset_id for r in active):
-                raise ValueError('文件仍被待执行或运行中任务使用，请先停止任务')
+                raise ValueError('A pending or running job still uses this file. Stop the job first')
             db.execute('DELETE FROM assets WHERE id=? AND owner=?', (asset_id, user['hash']))
             assets.asset_path(asset_id).unlink(missing_ok=True)
         return {'deleted': True}
@@ -142,9 +142,9 @@ def register_routes(app, owner):
             db.execute('BEGIN IMMEDIATE')
             existing = db.execute('SELECT owner FROM workflows WHERE id=?', (workflow_id,)).fetchone()
             if existing and existing['owner'] != user['hash']:
-                raise PermissionError('无权修改此工作流')
+                raise PermissionError('This API key cannot change this workflow')
             if not existing and db.execute('SELECT COUNT(*) FROM workflows WHERE owner=?', (user['hash'],)).fetchone()[0] >= 100:
-                raise ValueError('工作流数量达到100个上限')
+                raise ValueError('Workflow limit reached (100)')
             db.execute('INSERT OR REPLACE INTO workflows VALUES (?,?,?,?,?)', (workflow_id, user['hash'], body.name,
                        json.dumps([s.model_dump(exclude_none=True) for s in body.steps]), time.time()))
         return {'id': workflow_id, 'name': body.name}
@@ -162,10 +162,10 @@ def register_routes(app, owner):
             with database() as db:
                 workflow = db.execute('SELECT * FROM workflows WHERE id=? AND owner=?', (body.workflow_id, user['hash'])).fetchone()
             if not workflow:
-                raise ValueError('工作流不存在或无权访问')
+                raise ValueError('Workflow not found or not accessible')
             steps = json.loads(workflow['steps'])
             if len(steps) * body.repeat > 1000 or sum(s['wait_ms'] for s in steps) * body.repeat + body.interval_ms * (body.repeat - 1) > 3500000:
-                raise ValueError('单任务最多1000步，等待时长总和不能超过约58分钟')
+                raise ValueError('A job can have at most 1000 steps, and its waits cannot add up to more than about 58 minutes')
             payload = {'workflow_id': body.workflow_id, 'name': workflow['name'], 'steps': steps,
                        'repeat': body.repeat, 'interval_ms': body.interval_ms, 'on_error': body.on_error}
         elif body.kind in ('install', 'media'):

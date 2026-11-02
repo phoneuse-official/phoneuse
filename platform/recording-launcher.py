@@ -1,4 +1,4 @@
-"""Start the existing local recording workspace without exposing credentials."""
+"""Start the local web app and open it with the local API key, without exposing the key in logs."""
 import os
 from pathlib import Path
 import shutil
@@ -22,7 +22,7 @@ def main():
     state = ROOT / '.state'
     state.mkdir(exist_ok=True, mode=0o700)
     if not reachable('http://127.0.0.1:8765/openapi.json'):
-        label = f'gui/{os.getuid()}/local.qunkong.iphone-node'
+        label = f'gui/{os.getuid()}/com.phoneuse.local-node'
         subprocess.run(['launchctl', 'kickstart', label], check=False, capture_output=True)
         for _ in range(15):
             if reachable('http://127.0.0.1:8765/openapi.json'): break
@@ -42,7 +42,7 @@ def main():
         for _ in range(40):
             if reachable('http://localhost:3109/'): break
             time.sleep(1)
-        else: raise SystemExit('The recording page did not start. Check .state/recording-web.log.')
+        else: raise SystemExit('The web app did not start. Check platform/.state/recording-web.log.')
     url = 'http://localhost:3109/'
     token_file = state / 'admin-token'
     if token_file.is_file():
@@ -51,7 +51,7 @@ def main():
             # Fragments stay in the browser; the page clears it immediately.
             url += '#key=' + urllib.parse.quote(token, safe='')
     subprocess.run(['open', url], check=True)
-    print('PhoneUse is ready. Connect and unlock the recording iPhone. No phone content was changed.')
+    print('PhoneUse is ready. Connect and unlock your iPhone. No phone content was changed.')
 
 if __name__ == '__main__':
     main()

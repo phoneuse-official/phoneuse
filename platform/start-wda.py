@@ -26,17 +26,17 @@ args = parser.parse_args()
 from backend.service import STATE
 locks=STATE/'wda-locks';locks.mkdir(mode=0o700,exist_ok=True)
 if not args.udid or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-' for c in args.udid):
-    parser.error('设备标识无效')
+    parser.error('Invalid device identifier')
 lock_file=(locks/(args.udid+'.lock')).open('a')
 try:
     fcntl.flock(lock_file,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError:
-    print('这个设备已有代理启动进程，请等待它完成或退出。',file=sys.stderr)
+    print('A WDA launcher is already running for this device. Wait for it to finish or exit.',file=sys.stderr)
     raise SystemExit(75)
 os.set_inheritable(lock_file.fileno(),True)
 if args.parent_pid:
     if os.getpgrp()!=os.getpid():
-        parser.error('受管模式需要独立进程组')
+        parser.error('Managed mode needs its own process group')
     def watch_parent():
         while True:
             if os.getppid()!=args.parent_pid:
@@ -50,27 +50,27 @@ async def prepare():
     async with asyncio.timeout(90):
         async with await create_using_usbmux(serial=args.udid, autopair=False) as device:
             if not device.paired:
-                raise RuntimeError('请先在手机上信任这台 Mac')
+                raise RuntimeError('Trust this Mac on the iPhone first')
             if not await device.get_developer_mode_status():
-                raise RuntimeError('请先开启开发者模式并完成重启确认')
+                raise RuntimeError('Turn on Developer Mode and confirm it after the restart first')
             if args.bundle_id not in await InstallationProxyService(device).get_apps():
-                raise RuntimeError('未安装指定的 WDA 代理应用')
+                raise RuntimeError('The specified WebDriverAgent app is not installed')
             mounter = PersonalizedImageMounter(device)
             if not await mounter.is_image_mounted('Personalized'):
                 root = Path('/Library/Developer/DeveloperDiskImages/iOS_DDI/Restore')
                 manifest_path = root / 'BuildManifest.plist'
                 if not manifest_path.exists():
-                    raise RuntimeError('缺少本地开发者镜像，请安装对应 Apple 开发者支持组件')
+                    raise RuntimeError('The developer disk image is missing. Install the matching Apple developer support files')
                 manifest = plistlib.loads(manifest_path.read_bytes())
                 hardware = (await device.get_value(key='HardwareModel')).lower()
                 identity = next((b for b in manifest['BuildIdentities'] if b['Info']['DeviceClass'].lower() == hardware), None)
                 if not identity:
-                    raise RuntimeError('本地开发者镜像不包含这个手机型号')
+                    raise RuntimeError('The local developer disk image does not support this iPhone model')
                 entries = identity['Manifest']
                 image = root / entries['PersonalizedDMG']['Info']['Path']
                 trust = root / entries['LoadableTrustCache']['Info']['Path']
                 await mounter.mount(image, manifest_path, trust)
-            print('手机配对、开发者模式、代理应用和开发者镜像已就绪。', flush=True)
+            print('Pairing, Developer Mode, WebDriverAgent and the developer disk image are ready.', flush=True)
 
 
 try:
@@ -79,7 +79,7 @@ try:
     except DeviceError:
         status = {}
     if status.get('value', {}).get('ready'):
-        print('WDA 已在运行，无需重复启动。')
+        print('WDA is already running; nothing to start.')
         raise SystemExit(0)
     asyncio.run(prepare())
     if not args.prepare_only:
