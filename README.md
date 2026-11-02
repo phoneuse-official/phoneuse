@@ -8,7 +8,15 @@
 Open-source tools for controlling a USB-connected iPhone from your Mac: a local web interface,
 live screen preview, natural-language prompts, REST API, and MCP server.
 
-**[▶ Watch the 50-second demo](https://YOUR-VIDEO-DOMAIN/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4)**
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="https://pub-YOUR-ID.r2.dev/07%20-%20Google%20Maps%20Starbucks%20Share%20-%20PhoneUse%20launch.mp4"><img src="https://pub-YOUR-ID.r2.dev/readme-maps.gif" width="240" alt="PhoneUse finds a Starbucks in Google Maps"></a><br><sub>Google Maps: find a Starbucks</sub></td>
+    <td align="center" width="33%"><a href="https://pub-YOUR-ID.r2.dev/17%20-%20DoorDash%20Order%20and%20Text%20Update%20-%20PhoneUse%20launch.mp4"><img src="https://pub-YOUR-ID.r2.dev/readme-doordash.gif" width="240" alt="PhoneUse orders Diet Coke on DoorDash"></a><br><sub>DoorDash: order Diet Coke</sub></td>
+    <td align="center" width="33%"><a href="https://pub-YOUR-ID.r2.dev/09%20-%20GEICO%20Renters%20Quote%20Setup%20-%20PhoneUse%20launch.mp4"><img src="https://pub-YOUR-ID.r2.dev/readme-geico.gif" width="240" alt="PhoneUse starts a GEICO renters quote"></a><br><sub>GEICO: start a renters quote</sub></td>
+  </tr>
+</table>
+
+**[▶ Watch the 50-second demo](https://pub-YOUR-ID.r2.dev/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4)** · Click any clip above to watch it in full · [More demos](#demo-videos)
 
 Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).
 Want phones without managing hardware on your desk? [Explore PhoneUse →](https://phoneuse.com/?utm_source=github&utm_medium=readme_cta&utm_campaign=phoneuse-local)
@@ -30,19 +38,20 @@ Accessibility support varies by app. A task marked finished is a model-reported 
 
 ## Demo videos
 
-Real tasks on a real iPhone, run by PhoneUse Local. Click **▶ Watch** to play a video in your browser.
+Recorded on a real iPhone with PhoneUse Local. The prompt panel on the left is added for the video, and clips are trimmed for length.
+Click **▶ Watch** to play a video in your browser.
 
 | App | What PhoneUse does | Video |
 | --- | --- | --- |
-| **Overview** | The 50-second launch demo. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4) |
-| **TikTok** | Browses the TikTok feed. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/02%20-%20TikTok%20Feed%20Browsing%20-%20PhoneUse%20launch.mp4) |
-| **Instagram** | Watches Instagram Reels. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/03%20-%20Instagram%20Reels%20-%20PhoneUse%20launch.mp4) |
-| **Telegram** | Sends a “good morning” message. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/05%20-%20Telegram%20Good%20Morning%20-%20PhoneUse%20launch.mp4) |
-| **Google Maps** | Finds a Starbucks and shares it. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/07%20-%20Google%20Maps%20Starbucks%20Share%20-%20PhoneUse%20launch.mp4) |
-| **GEICO** | Sets up a renters insurance quote. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/09%20-%20GEICO%20Renters%20Quote%20Setup%20-%20PhoneUse%20launch.mp4) |
-| **Reddit** | Browses Reddit and leaves a comment. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/15%20-%20Reddit%20Browsing%20and%20Comment%20-%20PhoneUse%20launch.mp4) |
-| **Amazon** | Reviews a Diet Coke order. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/16%20-%20Amazon%20Diet%20Coke%20Order%20Review%20-%20PhoneUse%20launch.mp4) |
-| **DoorDash** | Places an order and texts an update. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/17%20-%20DoorDash%20Order%20and%20Text%20Update%20-%20PhoneUse%20launch.mp4) |
+| **Overview** | The 50-second launch demo. | [▶ Watch](https://pub-YOUR-ID.r2.dev/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4) |
+| **TikTok** | Browses the TikTok feed. | [▶ Watch](https://pub-YOUR-ID.r2.dev/02%20-%20TikTok%20Feed%20Browsing%20-%20PhoneUse%20launch.mp4) |
+| **Instagram** | Watches Instagram Reels. | [▶ Watch](https://pub-YOUR-ID.r2.dev/03%20-%20Instagram%20Reels%20-%20PhoneUse%20launch.mp4) |
+| **Telegram** | Sends a “good morning” message. | [▶ Watch](https://pub-YOUR-ID.r2.dev/05%20-%20Telegram%20Good%20Morning%20-%20PhoneUse%20launch.mp4) |
+| **Google Maps** | Finds a Starbucks and shares it. | [▶ Watch](https://pub-YOUR-ID.r2.dev/07%20-%20Google%20Maps%20Starbucks%20Share%20-%20PhoneUse%20launch.mp4) |
+| **GEICO** | Sets up a renters insurance quote. | [▶ Watch](https://pub-YOUR-ID.r2.dev/09%20-%20GEICO%20Renters%20Quote%20Setup%20-%20PhoneUse%20launch.mp4) |
+| **Reddit** | Browses Reddit and leaves a comment. | [▶ Watch](https://pub-YOUR-ID.r2.dev/15%20-%20Reddit%20Browsing%20and%20Comment%20-%20PhoneUse%20launch.mp4) |
+| **Amazon** | Reviews a Diet Coke order. | [▶ Watch](https://pub-YOUR-ID.r2.dev/16%20-%20Amazon%20Diet%20Coke%20Order%20Review%20-%20PhoneUse%20launch.mp4) |
+| **DoorDash** | Places an order and texts an update. | [▶ Watch](https://pub-YOUR-ID.r2.dev/17%20-%20DoorDash%20Order%20and%20Text%20Update%20-%20PhoneUse%20launch.mp4) |
 
 > **Some of these demos send a message, post a comment or place an order.** Those are real actions on a real phone.
 > Watch the phone while a task runs, and start with the read-only prompts in [docs/DEMOS.md](docs/DEMOS.md).

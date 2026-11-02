@@ -81,19 +81,18 @@ iPhone recordings include the status bar, so check it for notifications.
 ## How to add a video
 
 Do not commit video files. `scripts/check-public-tree.py` fails on `.mp4`, `.jpg` and `.jpeg` files,
-on any binary file and on any file over 2 MB. The videos live in PhoneUse's Cloudflare R2 storage instead,
-served from PhoneUse's own web address, and the README links to them.
+on any binary file and on any file over 2 MB. The videos live in PhoneUse's Cloudflare R2 bucket instead,
+and the README links to them.
 
 1. Upload the `.mp4` to the R2 bucket. Use a file name without spaces, such as `18-search-the-web.mp4`.
    (Spaces work too, but each one must be written as `%20` in the link.)
-2. Copy its public link on PhoneUse's own domain. Do not use an `r2.dev` link: Cloudflare says those are
-   rate-limited and meant only for testing.
+2. Copy its public link. It starts with the bucket's `https://pub-….r2.dev/` address.
 3. Open the link in a private browser window. It must play without signing in.
    If the browser downloads the file instead of playing it, set the file's content type to `video/mp4` in R2.
 4. Add a row to the **Demo videos** table in `README.md`:
 
    ```markdown
-   | **App name** | What PhoneUse does. | [▶ Watch](https://YOUR-VIDEO-DOMAIN/18-search-the-web.mp4) |
+   | **App name** | What PhoneUse does. | [▶ Watch](https://pub-YOUR-ID.r2.dev/18-search-the-web.mp4) |
    ```
 
 5. Add the same video to the [Recorded videos](#recorded-videos) table above.
@@ -102,6 +101,26 @@ GitHub does not play videos from other sites inside the README. Its pages only p
 so clicking **▶ Watch** opens the video on its own page.
 
 **Every upload is public.** Anyone with the link can watch it, so check the video before you upload it.
+
+## Autoplay clips at the top of the README
+
+The three clips at the top of the README are short GIFs. GitHub shows a GIF as a picture,
+so it plays by itself and loops; clicking it opens the full video.
+
+Each GIF shows only the phone, is about 10 seconds long, 240 pixels wide and under 1 MB.
+Pick a stretch with no personal details: no names, addresses, recent searches, payment details,
+contacts or notifications. Then make the GIF with FFmpeg, changing the start (`-ss`), length (`-t`)
+and speed (`PTS/1.2`):
+
+```sh
+ffmpeg -ss 11 -t 11 -i "input.mp4" \
+  -vf "crop=440:880:1230:130,setpts=PTS/1.2,fps=12,scale=240:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
+  -loop 0 readme-clip.gif
+```
+
+The crop box fits videos exported from PhoneUse Demo Studio (1920 × 1080, phone on the right).
+Watch the finished GIF frame by frame, upload it to the R2 bucket next to the videos,
+and add it to the table at the top of `README.md`.
 
 ## Demo scripts
 
