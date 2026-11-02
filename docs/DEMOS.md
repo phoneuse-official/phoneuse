@@ -43,7 +43,7 @@ Every demo only looks things up or reads the screen. None of them sends, buys, d
 
 - [ ] **Watch every frame** before uploading, and pause on fast parts. Look for device IDs (serial number, UDID, IMEI), notifications, contacts, names, email addresses, phone numbers, locations and the API key.
 - [ ] Trim the clip to the length in the table.
-- [ ] Save it as `.mp4` (H.264), which plays in every browser. Keep it **under 10 MB**, GitHub's video limit on free plans (100 MB on paid plans).
+- [ ] Save it as `.mp4` (H.264), which plays in every browser. Keep the file small so it starts quickly.
 - [ ] If the task fails or does something unexpected, do not use that take. Record again, or skip the demo and open an issue.
 
 ## How to record
@@ -60,29 +60,31 @@ iPhone recordings include the status bar, so check it for notifications.
 ## How to add a video
 
 Do not commit video files. `scripts/check-public-tree.py` fails on `.mp4`, `.jpg` and `.jpeg` files,
-on any binary file and on any file over 2 MB.
+on any binary file and on any file over 2 MB. The videos live in PhoneUse's Cloudflare R2 storage instead,
+and the README links to them. Clicking a link plays the whole video in the browser.
 
-**To play the whole video inside the README, upload it to GitHub.** GitHub only plays videos stored on GitHub.
-Its pages block video players from other sites, including Cloudflare R2. A link to a video on R2 still works,
-but it opens the video in a new tab instead of playing it in the README.
+1. Upload the `.mp4` to the public R2 bucket. Use clear file names, such as `demo-3-search-the-web.mp4`.
+   Serve the bucket from your own domain: Cloudflare says the default `r2.dev` link is rate-limited and meant only for testing.
+2. Also upload a still picture from the video (a `.png` or `.jpg` frame) with the same name, such as `demo-3-search-the-web.png`.
+   The README shows this picture, and clicking it opens the video.
+3. In `README.md`, find the matching comment, for example `<!-- VIDEO demo-3 ... -->`.
+   Replace the `_Video coming soon._` line under it with the picture and a text link:
 
-1. On github.com, open the pull request for the README in this repository.
-2. Drag the `.mp4` into the comment box and wait for the upload to finish.
-   GitHub inserts a link that starts with `https://github.com/user-attachments/assets/`.
-3. Post the comment, then copy the link.
-4. In `README.md`, find the matching comment, for example `<!-- VIDEO demo-3 ... -->`.
-   Replace the `_Video coming soon._` line under it with the link, alone on its line, with a blank line before and after.
-   GitHub shows it as a full video player.
-5. Put the hero clip's link in the `<!-- HERO VIDEO -->` slot at the top of the README.
-6. Open the README on github.com and play each video to the end.
-7. Mark the demo as **Recorded** in the table above.
+   ```markdown
+   [![Watch: Search the web](https://YOUR-R2-DOMAIN/demo-3-search-the-web.png)](https://YOUR-R2-DOMAIN/demo-3-search-the-web.mp4)
 
-**Keeping a copy on R2 (optional):** R2 is a good master copy, and the website can use it.
-If you also want an R2 link in the README, add it under the video, for example:
-`[Open in a new tab](https://YOUR-R2-LINK/demo-3-search-the-web.mp4)`.
+   [▶ Watch the video (40 s)](https://YOUR-R2-DOMAIN/demo-3-search-the-web.mp4)
+   ```
 
-**Every upload is public.** On a public repository, anyone with the link can watch a GitHub upload without signing in.
-The same goes for a public R2 link. Check the video before you upload it.
+4. Do the same for the hero clip in the `<!-- HERO VIDEO -->` slot at the top of the README.
+5. Open each link in a private browser window. It must play without signing in.
+   If the browser downloads the file instead of playing it, set the file's content type to `video/mp4` in R2.
+6. Mark the demo as **Recorded** in the table above.
+
+GitHub does not play videos from other sites inside the README. Its pages only play videos stored on GitHub,
+so an R2 video always opens on its own page.
+
+**Every upload is public.** Anyone with the link can watch it, so check the video before you upload it.
 
 ## Demo scripts
 
