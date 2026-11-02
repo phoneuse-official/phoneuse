@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/phoneuse-official/phoneuse/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Hosted PhoneUse help
+    url: https://docs.phoneuse.com/
+    about: Questions about the hosted PhoneUse product, which is separate from this repository.

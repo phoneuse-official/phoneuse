@@ -13,6 +13,8 @@ patterns = [
     ('API credential', re.compile(r'\b(?:sk-proj-|ghp_|github_pat_)[A-Za-z0-9_\-]{20,}')),
     ('local home path', re.compile(r'/Users/[A-Za-z0-9_.-]+/')),
     ('device identifier', re.compile(r'\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}\b')),
+    # User-facing text is English; escape any locale-specific matching strings.
+    ('Chinese text', re.compile(r'[\u3400-\u9fff\uf900-\ufaff]')),
 ]
 failures = []
 for name in filter(None, paths):

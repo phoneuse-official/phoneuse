@@ -50,11 +50,13 @@ close all preview tabs, wait for capture to release, restart WDA, and reopen the
 - **Invalid session after restart:** refresh observation/reconnect; do not blindly retry a write action.
 - **Video paused:** return to the foreground browser tab; the UI pauses background video.
 - **Model error:** verify `codex login status`, CLI availability and account quota.
-- **Port already in use:** another checkout may own 8765/3109. Do not run two installations on the same ports.
+- **Port already in use:** another checkout or an older install may own 8765/3109. Check with
+  `lsof -nP -iTCP:8765 -sTCP:LISTEN`, stop that copy yourself, then start this one. Do not run two installations on the same ports.
 - **Agent cannot find a visible button:** some apps omit accessibility elements. Use manual control or another task.
 
 ## Optional login service
 
 `platform/manage-node-service.py install` registers the current checkout as a macOS login service.
-It replaces the existing service named `local.qunkong.iphone-node`, so inspect `status` before using it.
+It registers the service `com.phoneuse.local-node`, so inspect `status` before using it. An older
+`local.qunkong.iphone-node` service is removed only when it runs this same checkout.
 Use `remove` to unregister it. Foreground startup is recommended for first-time setup.
