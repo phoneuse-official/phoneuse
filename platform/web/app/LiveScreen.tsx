@@ -26,7 +26,7 @@ export default function LiveScreen({deviceId,apiKey,accessRevision,hideIndicator
     const response=await fetch(`http://127.0.0.1:8765/api/devices/${encodeURIComponent(deviceId)}/view`,{method:'POST',headers:{Authorization:`Bearer ${apiKey}`},signal:request.signal});
     if(disposed||gen!==generation||document.hidden)return;
     if(!response.ok){let detail='Connection unavailable';try{detail=(await response.json() as {detail?:string}).detail||detail;}catch{}
-     if(response.status===401||response.status===403){terminal=true;markOffline(typeof detail==='string'?detail:'Access ended. Reopen the page with Start PhoneUse.command.',true);if(response.status===401)window.dispatchEvent(new Event('phoneuse-auth-expired'));return;}
+     if(response.status===401||response.status===403){terminal=true;markOffline(typeof detail==='string'?detail:'Access ended. Reopen the page with Start PhoneUse.command.',true);if(response.status===401)window.dispatchEvent(new CustomEvent('phoneuse-auth-expired',{detail:{key:apiKey}}));return;}
      if(response.status===409&&typeof detail==='string'&&detail.startsWith('Screen access was released')){terminal=true;markOffline('Connection released. Click Reconnect screen.',true);return;}
      throw new Error(typeof detail==='string'?detail:'Waiting for the phone');
     }

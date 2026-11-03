@@ -5,6 +5,7 @@ import {ArrowUp,Check,ExternalLink,LoaderCircle,MessageSquarePlus,PanelLeft,Pane
 import './chat.css';
 import {ChatHistorySidebar} from './components/chat-history-sidebar';
 import {PhonePanel} from './components/phone-panel';
+import {forgetRejectedKey} from './saved-connection';
 import {addTaskToConversation,createConversation,historyScope,loadChatHistory,reconcileTasks,saveChatHistory,type ApiTask,type ChatHistory,type ChatTask,type Conversation} from './chat-history';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -79,7 +80,7 @@ export default function Demo(){
     let savedKey=fragment||'';
     try{
       if(savedKey)sessionStorage.setItem('phoneuse-api-key',savedKey);
-      else savedKey=sessionStorage.getItem('phoneuse-api-key')||'';
+      else savedKey=sessionStorage.getItem('phoneuse-api-key')||localStorage.getItem('phoneuse-api-key')||'';
     }catch{}
     setKey(savedKey);
   },[]);
@@ -94,8 +95,11 @@ export default function Demo(){
   },[activeChatId,conversations,historyReady,authenticatedKey,key,historyStorageScope]);
 
   useEffect(()=>{
-    const expired=()=>{
-      try{sessionStorage.removeItem('phoneuse-api-key');}catch{}
+    const expired=(event:Event)=>{
+      const rejectedKey=(event as CustomEvent<{key?:string}>).detail?.key??key;
+      if(rejectedKey!==key)return;
+      try{forgetRejectedKey(sessionStorage,key);}catch{}
+      try{forgetRejectedKey(localStorage,key);}catch{}
       setKey('');
       setDevice('');
       setDevices([]);
@@ -108,7 +112,7 @@ export default function Demo(){
     };
     window.addEventListener('phoneuse-auth-expired',expired);
     return()=>window.removeEventListener('phoneuse-auth-expired',expired);
-  },[]);
+  },[key]);
 
   async function call<T>(path:string,method='GET',body?:unknown):Promise<T>{
     const response=await fetch(API+path,{
@@ -118,7 +122,7 @@ export default function Demo(){
       signal:AbortSignal.timeout(12000),
     });
     const data=await response.json() as T&{detail?:string};
-    if(response.status===401)window.dispatchEvent(new Event('phoneuse-auth-expired'));
+    if(response.status===401)window.dispatchEvent(new CustomEvent('phoneuse-auth-expired',{detail:{key}}));
     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:`Request failed (${response.status})`);
     return data;
   }
@@ -143,6 +147,8 @@ export default function Demo(){
         ]);
         if(disposed)return;
         if(!loaded){
+          // Remember only credentials that both API reads have authenticated.
+          try{localStorage.setItem('phoneuse-api-key',key);}catch{}
           // Authenticate both API reads before opening this credential's cache.
           const scope=await historyScope(key);
           if(disposed)return;
@@ -323,14 +329,14 @@ export default function Demo(){
   if(!key||!historyReady||authenticatedKey!==key)return <main className="login-shell">
     <Card className="login-card">
       <div className="brand-lockup"><span className="brand-mark"><Sparkles aria-hidden="true"/></span><span>PhoneUse</span><Badge variant="secondary">Local</Badge></div>
-      <div className="login-copy"><h1>Connect to your workspace</h1><p>Open PhoneUse with Start PhoneUse.command to connect automatically, or enter the local API key below.</p></div>
+      <div className="login-copy"><h1>Connect to your workspace</h1><p>Connect once to get started. This browser will remember your workspace when you return. Open Start PhoneUse.command to connect automatically, or enter your local API key below.</p></div>
       {error&&<div className="inline-alert" role="alert"><span>{error}</span></div>}
       <form className="login-form" onSubmit={connect}>
         <label htmlFor="local-api-key">Local API key</label>
         <Input id="local-api-key" type="password" autoComplete="off" value={draft} onChange={event=>setDraft(event.target.value)} required/>
         <Button type="submit" className="login-submit">Connect <ArrowUp aria-hidden="true"/></Button>
       </form>
-      <div className="login-foot"><ShieldCheck aria-hidden="true"/><span>Your key stays in this browser session and is sent only to the local API.</span></div>
+      <div className="login-foot"><ShieldCheck aria-hidden="true"/><span>Your key is saved in this browser and is sent only to the local API.</span></div>
     </Card>
   </main>;
 
