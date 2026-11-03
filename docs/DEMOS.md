@@ -6,23 +6,26 @@ new videos, and the steps for adding one to the [README](../README.md).
 ## Recorded videos
 
 These are linked from the README's [Demo videos](../README.md#demo-videos) table. The files are stored on
-PhoneUse's video storage, not in this repository.
+PhoneUse's video storage at `https://pub-b1e2c1245ef644aa89f7c5da08db4154.r2.dev/`, not in this repository.
 
-| Video | What PhoneUse does | Size | Every frame checked |
+| Video | What PhoneUse does | Size | Personal details blurred |
 | --- | --- | --- | --- |
-| Overview | The 50-second launch video | 2.3 MB | Not yet |
-| TikTok | Browses the TikTok feed | 2.88 MB | Not yet |
-| Instagram | Watches Instagram Reels | 8.64 MB | Not yet |
-| Telegram | Sends a “good morning” message | 612.74 KB | Not yet |
-| Google Maps | Finds a Starbucks and shares it | 1.99 MB | Not yet |
-| GEICO | Sets up a renters insurance quote | 1.38 MB | Not yet |
-| Reddit | Browses Reddit and leaves a comment | 2.54 MB | Not yet |
-| Amazon | Reviews a Diet Coke order | 1.95 MB | Not yet |
-| DoorDash | Places an order and texts an update | 1.77 MB | Not yet |
+| Overview | The 50-second launch video | 1.9 MB | Yes |
+| TikTok | Browses the TikTok feed | 2.03 MB | Yes |
+| Instagram | Watches Instagram Reels | 8.07 MB | Yes |
+| Telegram | Sends a “good morning” message | 619.23 KB | Yes |
+| Google Maps | Finds a Starbucks and shares it | 1.71 MB | Yes |
+| GEICO | Sets up a renters insurance quote | 1.37 MB | Yes |
+| Reddit | Browses Reddit and leaves a comment | 2.53 MB | Yes |
+| Amazon | Reviews a Diet Coke order | 1.85 MB | Yes |
+| DoorDash | Places an order and texts an update | 1.64 MB | Yes |
 
 Some of these send a message, post a comment or place an order. Those are real actions on a real phone.
-Before the README goes live, check every frame of each video against the [checklist](#after-recording)
-and change **Not yet** to **Yes**.
+
+Names, contacts, addresses, recent searches, payment details, account names, calendar events
+and home-screen widgets are blurred in every video. Each video was checked at two frames a second,
+and frame by frame wherever a blur starts or ends. Check any new video against the
+[checklist](#after-recording) the same way before you upload it.
 
 ## Prompts to try yourself
 
@@ -86,13 +89,13 @@ and the README links to them.
 
 1. Upload the `.mp4` to the R2 bucket. Use a file name without spaces, such as `18-search-the-web.mp4`.
    (Spaces work too, but each one must be written as `%20` in the link.)
-2. Copy its public link. It starts with the bucket's `https://pub-….r2.dev/` address.
+2. Copy its public link. It starts with the bucket's `https://pub-b1e2c1245ef644aa89f7c5da08db4154.r2.dev/` address.
 3. Open the link in a private browser window. It must play without signing in.
    If the browser downloads the file instead of playing it, set the file's content type to `video/mp4` in R2.
 4. Add a row to the **Demo videos** table in `README.md`:
 
    ```markdown
-   | **App name** | What PhoneUse does. | [▶ Watch](https://pub-YOUR-ID.r2.dev/18-search-the-web.mp4) |
+   | **App name** | What PhoneUse does. | [▶ Watch](https://pub-b1e2c1245ef644aa89f7c5da08db4154.r2.dev/18-search-the-web.mp4) |
    ```
 
 5. Add the same video to the [Recorded videos](#recorded-videos) table above.
