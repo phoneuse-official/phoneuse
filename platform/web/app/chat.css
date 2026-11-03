@@ -197,3 +197,7 @@
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+.visual-fallback-option{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 6px 8px;color:var(--muted-foreground);font-size:11px;line-height:1.5}
+.visual-fallback-option input{margin:0;accent-color:var(--foreground)}
+.visual-fallback-option span{font-size:10px}
