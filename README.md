@@ -1,27 +1,9 @@
 # PhoneUse Local
 
-**Give your AI agent a real iPhone, right on your desk.**
+Give your AI agent a real iPhone, right on your desk.
 
-Open-source tools for controlling a USB-connected iPhone from your Mac: a local web interface,
-live screen preview, natural-language prompts, REST API, and MCP server.
-
-Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).
+Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).  
 Want phones without managing hardware on your desk? [Explore PhoneUse →](https://phoneuse.com/?utm_source=github&utm_medium=readme_cta&utm_campaign=phoneuse-local)
-
-> Experimental developer preview. Bring your own Mac, iPhone, Apple signing setup, and model access.
-> This project uses WebDriverAgent. It is separate from the hosted PhoneUse platform and does not
-> include hosted phones, production infrastructure, or a guarantee that every app can be automated.
-
-## What you can do
-
-- Enter a prompt in a browser and watch the phone respond.
-- Open apps, inspect accessibility elements, tap, type, and scroll.
-- Watch live video through WDA's compatible stream; optional native macOS capture is available.
-- Use the authenticated REST API or connect an MCP client.
-- Stop agent tasks and inspect their results. Clear the displayed conversation independently of local execution records.
-
-Start with a reversible prompt: **“Open Safari and describe the current screen. Do not submit anything.”**
-Accessibility support varies by app. A task marked finished is a model-reported result; verify important outcomes on the device.
 
 ## Requirements
 
@@ -127,31 +109,9 @@ It lives in the ignored `platform/.state/` directory. “Clear chat” hides com
 it does not erase execution records. Never publish this directory or your Mac's pairing/signing files.
 See [SECURITY.md](SECURITY.md).
 
-## Develop
-
-```sh
-# Backend tests; use disposable state, never your live phone configuration.
-export QUNKONG_STATE_DIR="$(mktemp -d)"
-(cd platform && ../.venv/bin/python -m pytest tests -q)
-(cd platform/web && npm run typecheck && npm run build)
-python3 scripts/check-public-tree.py
-```
-
-| Directory | Contents |
-| --- | --- |
-| `platform/backend` | API, USB device control, agent, MCP and streaming |
-| `platform/web` | Local web UI |
-| `platform/native` | Optional macOS capture helpers |
-| `platform/tests` | Device-free Python tests |
-| `docs` | Architecture, integration and release notes |
-
-Some advanced operator screens and runtime errors are still in Chinese. Historical Calendar/Maps
-fixture code remains for regression tests; its personal assets and recipient configuration are not distributed.
-See [CONTRIBUTING.md](CONTRIBUTING.md) to help improve setup, reliability and accessibility support.
-
 ## Local or hosted?
 
-Use this repo when you want to experiment with your own iPhone and manage its signing and USB connection.
+Use this repo when you want to experiment with your own iPhone and manage its signing and cable connection.
 For the hosted product, visit [phoneuse.com](https://phoneuse.com/?utm_source=github&utm_medium=readme_footer&utm_campaign=phoneuse-local)
 and [PhoneUse documentation](https://docs.phoneuse.com/). These are separate deployments and credentials.
 
