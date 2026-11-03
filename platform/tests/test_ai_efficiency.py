@@ -103,3 +103,53 @@ def test_default_history_preserves_facts_across_three_screens():
 def test_history_rejects_invalid_retention_limits(limit):
     with pytest.raises(ValueError,match='positive integer'):
         prompt_history([],limit)
+
+
+def test_long_task_continues_past_old_step_and_time_limits(monkeypatch):
+    from backend import ai_runner
+    from backend.codex_api import TaskRequest
+
+    clock=[0.0]
+    monkeypatch.setattr(ai_runner.time,'monotonic',lambda:clock[0])
+
+    class Model:
+        calls=0
+
+        def turn(self,messages):
+            self.calls+=1
+            clock[0]+=10
+            if self.calls<=35:
+                return {'content':[{'type':'tool_use','id':str(self.calls),
+                    'name':'device_action','input':{'action':'source_fast'}}]}
+            return {'content':[{'type':'text','text':'Verified every subgoal'}]}
+
+    class Phone:
+        def execute(self,params):
+            return {'tree':'Verified page'}
+
+    request=TaskRequest(device_id='test-phone',task='Complete all subgoals')
+    report=run(request.task,Phone(),Model(),{'max_steps':request.max_steps})
+    assert report['status']=='model_reported_result'
+    assert report['model_calls']==36
+    assert report['elapsed_seconds']==360
+
+
+def test_extended_task_still_stops_at_deadline(monkeypatch):
+    from backend import ai_runner
+
+    clock=[0.0]
+    monkeypatch.setattr(ai_runner.time,'monotonic',lambda:clock[0])
+
+    class Model:
+        def turn(self,messages):
+            clock[0]+=301
+            return {'content':[{'type':'tool_use','id':str(clock[0]),
+                'name':'device_action','input':{'action':'source_fast'}}]}
+
+    class Phone:
+        def execute(self,params):
+            return {'tree':'Still working'}
+
+    report=run('Read pages',Phone(),Model(),{})
+    assert report['status']=='time_limit'
+    assert report['model_calls']==2

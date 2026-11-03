@@ -65,15 +65,21 @@ def test_wrong_focus_cannot_report_success_or_repeat_typing(input_controller):
 
 @pytest.mark.parametrize('kind,name',[
     ('XCUIElementTypeSecureTextField','Password'),
-    ('XCUIElementTypeTextField','Email'),
-    ('XCUIElementTypeTextField','Credit card number'),
     ('XCUIElementTypeButton','Search'),
 ])
-def test_sensitive_or_non_input_target_is_never_read_or_changed(input_controller,kind,name):
+def test_secure_or_non_input_target_is_never_read_or_changed(input_controller,kind,name):
     controller,state,calls=input_controller
     state.update(type=kind,name=name,label=name)
     assert perform(controller,'element_input_state')['eligible'] is False
     assert not any(path.endswith('/attribute/value') or method=='POST' for method,path,body in calls)
+
+
+@pytest.mark.parametrize('name',['Email','Credit card number','Verification code'])
+def test_field_label_does_not_block_verified_input(input_controller,name):
+    controller,state,calls=input_controller
+    state.update(type='XCUIElementTypeTextField',name=name,label=name)
+    assert perform(controller,'element_fill',text='synthetic test value')['verified'] is True
+    assert state['value']=='synthetic test value'
 
 
 def test_submission_requires_matching_query_and_search_field(input_controller):
@@ -209,7 +215,7 @@ def test_uncertain_result_never_reaches_another_model_decision():
     assert report['model_calls']==1
 
 
-def test_missing_target_allows_only_two_recovery_attempts():
+def test_missing_target_gets_one_fresh_review_then_stops():
     class Phone:
         def execute(self,params):
             if params['action']=='find_elements':return {'count':0,'elements':[]}
@@ -221,8 +227,9 @@ def test_missing_target_allows_only_two_recovery_attempts():
                 'input':{'steps':[{'action':'click_target','query':'Missing','timeout_ms':0}]}}]}
     report=run('Navigate',Phone(),Model(),{'executor':'program'})
     assert report['status']=='blocked'
-    assert report['model_calls']==3
-    assert report['recovery_attempts']==2
+    assert report['model_calls']==4
+    assert report['recovery_attempts']==3
+    assert report['blocked_reviews']==1
 
 
 @pytest.mark.parametrize('filled',[False,True])

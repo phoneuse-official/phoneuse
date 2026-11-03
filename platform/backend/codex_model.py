@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 from .config import setting
-from .ai_runner import SYSTEM, TOOL, prompt_history
+from .ai_runner import SYSTEM, TOOL, prompt_history, TASK_TIMEOUT_SECONDS
 from . import phone_program
 
 SCHEMA = {'type':'object','properties':{
@@ -20,16 +20,21 @@ SCHEMA = {'type':'object','properties':{
     'required':['kind','parameters','answer','task_notes'],'additionalProperties':False}
 
 class CodexModel:
-    def __init__(self, cancel=None, progress=None, executor="baseline"):
+    def __init__(self, cancel=None, progress=None, executor="baseline", image_provider=None):
         self.executor=executor
+        self.image_provider=image_provider
+        self.timings={'prompt_seconds':0.0,'spawn_seconds':0.0,'response_seconds':0.0,'prompt_bytes':0}
         self.task_notes=''
         self.cancel=cancel or threading.Event()
         self.progress=progress or (lambda **kw:None)
-        config_path=Path(__file__).resolve().parents[1]/'.state/codex-config.json'
+        config_path=Path(setting('STATE_DIR') or Path(__file__).resolve().parents[1]/'.state')/'codex-config.json'
         config=json.loads(config_path.read_text()) if config_path.exists() else {}
         self.executable=setting('CODEX_BIN') or config.get('executable') or shutil.which('codex')
         if not self.executable:raise RuntimeError('Codex CLI is unavailable in API process PATH')
-        self.deadline=time.monotonic()+300
+        self.deadline=time.monotonic()+TASK_TIMEOUT_SECONDS
+        self.reasoning_effort=setting('CODEX_REASONING_EFFORT','low')
+        if self.reasoning_effort not in ('low','medium','high'):
+            raise ValueError('CODEX_REASONING_EFFORT must be low, medium, or high')
 
     def build_prompt(self,messages):
         # Retire older screens only after the model has supplied an explicit fact notebook.
@@ -54,17 +59,28 @@ class CodexModel:
     def turn(self,messages):
         self.progress(stage='thinking')
         if self.cancel.is_set():raise RuntimeError('Task cancelled')
+        preparation=time.monotonic()
         prompt=self.build_prompt(messages)
+        self.timings['prompt_bytes']+=len(prompt.encode('utf-8'))
         with tempfile.TemporaryDirectory(prefix='phoneuse-codex-') as tmp:
             schema=Path(tmp)/'schema.json';schema.write_text(json.dumps(SCHEMA))
             args=[self.executable,'exec','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only']
+            args+=['-c','model_reasoning_effort='+json.dumps(self.reasoning_effort)]
             for feature in ('shell_tool','unified_exec','apps','plugins','multi_agent'):args+=['--disable',feature]
+            image=self.image_provider() if self.image_provider else None
+            if image:
+                screenshot=Path(tmp)/'screen.png';screenshot.write_bytes(image);screenshot.chmod(0o600)
+                args+=['--image',str(screenshot)]
             args+=['-c','agents.enabled=false','-c','web_search="disabled"','-c','project_doc_max_bytes=0','--json','--output-schema',str(schema),'-C',tmp,'-']
             model=setting('CODEX_MODEL')
             if model:args[2:2]=['-m',model]
             env={k:v for k,v in os.environ.items() if k in ('HOME','PATH','CODEX_HOME','TMPDIR','LANG','SSL_CERT_FILE','SSL_CERT_DIR')}
             env['PATH']=str(Path(self.executable).parent)+os.pathsep+env.get('PATH','/usr/bin:/bin')
+            self.timings['prompt_seconds']+=time.monotonic()-preparation
+            spawned=time.monotonic()
             process=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env,start_new_session=True)
+            self.timings['spawn_seconds']+=time.monotonic()-spawned
+            waiting=time.monotonic()
             end=min(self.deadline,time.monotonic()+90)
             first=True
             try:
@@ -75,8 +91,10 @@ class CodexModel:
                         output,_=process.communicate(prompt if first else None,timeout=.5);break
                     except subprocess.TimeoutExpired:first=False
             finally:
+                self.timings['response_seconds']+=time.monotonic()-waiting
                 if process.poll() is None:
                     os.killpg(process.pid,signal.SIGKILL);process.communicate()
+                self.progress(model_timings={k:round(v,6) for k,v in self.timings.items()})
             if process.returncode:raise RuntimeError('Codex CLI failed; check local login and quota')
         response=self.parse(output)
         if response.get('task_notes'):self.task_notes=response['task_notes']

@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .config import setting
+from .targeting import Target, selectors, predicate, INPUT_TYPES
 from .inventory import inventory as device_cache
 from .native_capture import binding_for
 from .usb import DeviceError, device_info, list_usb, wda_request
@@ -190,7 +191,7 @@ class Controller:
 
     def perform(self, owner, device, action, params, job=None):
         # Screenshots and state reads stay available during automation.
-        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state', 'element_input_state')
+        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state', 'element_input_state', 'active_element')
         if action not in reads:
             self.check_reservation(device, job)
         with self.lock(device):
@@ -247,11 +248,9 @@ class Controller:
                     return wda_request(device,'GET',element+'/attribute/'+name).get('value')
                 kind=wda_request(device,'GET',element+'/name').get('value')
                 # Do not retrieve secure input values, even for the read-only probe.
-                if kind not in ('XCUIElementTypeTextField','XCUIElementTypeSearchField'):
-                    return {'eligible':False,'reason':'Target is not an ordinary single-line input'}
+                if kind not in INPUT_TYPES:
+                    return {'eligible':False,'reason':'Target is not a supported editable input'}
                 label=' '.join(str(attribute(name) or '') for name in ('name','label'))
-                if re.search(r'password|passcode|verification|one.time|\botp\b|\bpin\b|credit|card number|cvv|username|e.?mail|sign.in|log.in',label,re.I):
-                    return {'eligible':False,'reason':'Credential or payment field requires human action'}
                 eligible=displayed is True and enabled is True
                 value=attribute('value')
                 placeholder=attribute('placeholderValue')
@@ -288,20 +287,48 @@ class Controller:
             xml = wda_request(device, 'GET', root + '/source?format=xml&excluded_attributes=visible,accessible').get('value')
             return {'format': 'xml', 'source': xml, 'excluded_attributes': ['visible', 'accessible'],
                     'requires_target_verification': True}
+        if action == 'active_element':
+            try:value=wda_request(device,'GET',root+'/element/active').get('value')
+            except DeviceError as exc:
+                if str(exc)=='WDA: no such element':return None
+                raise
+            if not value:return None
+            ident=value.get('element-6066-11e4-a52e-4f735466cecf') or value.get('ELEMENT')
+            if not isinstance(ident,str) or not ident:raise DeviceError('Invalid active element handle')
+            return {'session_id':self.sessions[device],'element_id':ident,
+                'attributes':{k:value[k] for k in ('type','label','displayed','enabled','rect') if k in value}}
         if action == 'find_elements':
-            found = wda_request(device, 'POST', root + '/elements',
-                                {'using': 'accessibility id', 'value': p['query']}).get('value')
-            if not isinstance(found, list):
-                raise DeviceError('The phone returned an invalid element list')
-            elements = []
+            target=Target.model_validate(p['target']) if p.get('target') else Target(label=p['query'])
+            search_root=root
+            def find(using,value,path):
+                result=wda_request(device,'POST',path+'/elements',{'using':using,'value':value}).get('value')
+                if not isinstance(result,list):raise DeviceError('The phone returned an invalid element list')
+                return result
+            def handle(item):
+                if not isinstance(item,dict):raise DeviceError('The phone returned an invalid element ID')
+                ident=item.get('element-6066-11e4-a52e-4f735466cecf') or item.get('ELEMENT')
+                if not isinstance(ident,str) or not ident:raise DeviceError('The phone returned an invalid element ID')
+                return ident
+            if target.within:
+                scopes=find('predicate string',predicate(target.within),root)
+                if len(scopes)!=1:
+                    return {'elements':[],'count':0,'reason':'container_missing' if not scopes else 'container_ambiguous'}
+                search_root=root+'/element/'+quote(handle(scopes[0]),safe='')
+            found=[];strategy=None
+            for strategy,value in selectors(target):
+                found=find(strategy,value,search_root)
+                if found:break
+            elements=[]
             for item in found:
-                if not isinstance(item, dict):
-                    raise DeviceError('The phone returned an invalid element ID')
-                ident = item.get('element-6066-11e4-a52e-4f735466cecf') or item.get('ELEMENT')
-                if not isinstance(ident, str) or not ident:
-                    raise DeviceError('The phone returned an invalid element ID')
-                elements.append({'element_id': ident, 'session_id': self.sessions[device]})
-            return {'elements': elements, 'count': len(elements)}
+                candidate={'element_id':handle(item),'session_id':self.sessions[device]}
+                # WDA's top-level `name` means element TYPE, not accessibility name.
+                # Request attribute/name explicitly; never enrich input values.
+                attrs={k:item[k] for k in ('type','label','rect','enabled','displayed') if k in item}
+                if 'attribute/name' in item:attrs['name']=item['attribute/name']
+                if attrs:candidate['attributes']=attrs
+                elements.append(candidate)
+            return {'elements':elements,'count':len(elements),'strategy':strategy,
+                    'reason':None if elements else 'missing'}
         if action == 'alert_text':
             return wda_request(device, 'GET', root + '/alert/text').get('value')
         if action == 'pinch':
