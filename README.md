@@ -60,7 +60,7 @@ In a second Terminal window at the repository root, run:
 
 This opens **http://localhost:3109/** and passes the local API key to the page automatically. Keep the API running. The web app runs in the background; its log is `platform/.state/recording-web.log`.
 
-If the page asks for an API key, reopen it with `Start PhoneUse.command` so the local key is supplied. If the API or page is already running on ports 8765 or 3109, the launcher may use that existing instance; stop the other local PhoneUse checkout before starting this one.
+The browser remembers your local API key after a successful connection, including across tabs and browser restarts. Use the same browser and address (`http://localhost:3109/`) to reconnect automatically. Private browsing or clearing browser data removes the saved connection. If the page asks for an API key, reopen it once with `Start PhoneUse.command` so the local key is supplied. Rejected keys are removed from browser storage. If the API or page is already running on ports 8765 or 3109, the launcher may use that existing instance; stop the other local PhoneUse checkout before starting this one.
 
 ### 5. Select the phone and confirm live video
 
