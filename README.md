@@ -87,10 +87,13 @@ Browser at localhost:3109 ── authenticated HTTP / WebSocket ── Local Pyt
                                                               └─ WDA MJPEG → live preview
 ```
 
-Prompt execution uses accessibility observations. It can fail when apps omit accessible elements;
-this is not a general vision agent. The agent is instructed to hand off purchases, credentials,
-messages and other consequential operations; those instructions are not a security sandbox.
-The raw API and manual controls can perform real actions. Supervise use on personal devices.
+Prompt tasks read the screen with on-device text recognition (OCR) first and use accessibility data
+for typing, checking results, and when OCR finds nothing. The chat can switch to "Accessibility only",
+and can optionally send screenshots to the model when a control cannot be found. Apps with
+custom-drawn controls may still fail. The agent acts on what your task asks: it will send messages,
+make purchases, delete data or change settings when the task explicitly says so. Those are model
+instructions, not a security sandbox. The raw API and manual controls can also perform real actions.
+Supervise use on personal devices.
 
 ## API and MCP
 
