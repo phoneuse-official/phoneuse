@@ -52,7 +52,11 @@ close all preview tabs, wait for capture to release, restart WDA, and reopen the
 - **Model error:** verify `codex login status`, CLI availability and account quota.
 - **Port already in use:** another checkout or an older install may own 8765/3109. Check with
   `lsof -nP -iTCP:8765 -sTCP:LISTEN`, stop that copy yourself, then start this one. Do not run two installations on the same ports.
-- **Agent cannot find a visible button:** some apps omit accessibility elements. Use manual control or another task.
+- **Agent cannot find a visible button:** the agent reads screen text with OCR first and falls back to
+  accessibility data, but icon-only or custom-drawn controls can still be missed. Tick "Use screenshots if
+  controls cannot be found" (this shares screen images with the model), or use manual control.
+- **Each task takes a few seconds to start:** in OCR mode, every task first builds a small text-recognition
+  helper with Xcode. Choose "Accessibility only" in the chat to skip it.
 
 ## Optional login service
 

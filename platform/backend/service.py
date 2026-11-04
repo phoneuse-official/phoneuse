@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .config import setting
+from .targeting import Target, selectors, predicate, INPUT_TYPES
 from .inventory import inventory as device_cache
 from .native_capture import binding_for
 from .usb import DeviceError, device_info, list_usb, wda_request
@@ -190,7 +191,7 @@ class Controller:
 
     def perform(self, owner, device, action, params, job=None):
         # Screenshots and state reads stay available during automation.
-        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state', 'element_input_state')
+        reads = ('status', 'screenshot', 'source', 'window_size', 'active_app', 'battery', 'orientation', 'locked', 'source_fast', 'find_elements', 'element_state', 'element_input_state', 'active_element')
         if action not in reads:
             self.check_reservation(device, job)
         with self.lock(device):
@@ -234,7 +235,8 @@ class Controller:
                 except (ValueError, TypeError, UnicodeError):
                     raise DeviceError('The phone returned invalid clipboard text')
             return value
-        # Element handles are bound to the issuing session; never rebind or replay them.
+        # Handles remain bound to their issuing session. Only a focus transition
+        # may refresh an editor before any content change; never replay mutations.
         if action in ('element_state', 'element_click','element_input_state','element_fill','element_submit_search'):
             if self.sessions.get(device) != p['session_id']:
                 raise DeviceError('The element session has expired. Find the element again')
@@ -247,11 +249,10 @@ class Controller:
                     return wda_request(device,'GET',element+'/attribute/'+name).get('value')
                 kind=wda_request(device,'GET',element+'/name').get('value')
                 # Do not retrieve secure input values, even for the read-only probe.
-                if kind not in ('XCUIElementTypeTextField','XCUIElementTypeSearchField'):
-                    return {'eligible':False,'reason':'Target is not an ordinary single-line input'}
-                label=' '.join(str(attribute(name) or '') for name in ('name','label'))
-                if re.search(r'password|passcode|verification|one.time|\botp\b|\bpin\b|credit|card number|cvv|username|e.?mail|sign.in|log.in',label,re.I):
-                    return {'eligible':False,'reason':'Credential or payment field requires human action'}
+                if kind not in INPUT_TYPES:
+                    return {'eligible':False,'reason':'Target is not a supported editable input'}
+                identity=tuple(str(attribute(name) or '') for name in ('name','label'))
+                label=' '.join(identity)
                 eligible=displayed is True and enabled is True
                 value=attribute('value')
                 placeholder=attribute('placeholderValue')
@@ -261,12 +262,42 @@ class Controller:
                 if not eligible:return {'status':'needs_replan','reason':'Input is hidden or disabled'}
                 if action=='element_fill':
                     if value==p['text'] and value!=placeholder:return {'status':'completed','verified':True,'already_matched':True}
-                    # Bind every mutation to this exact handle; never use global keyboard typing.
-                    wda_request(device,'POST',element+'/click',{})
+                    # Focus may replace Safari's address field. Refresh only before
+                    # clear/type; an uncertain content mutation must never be replayed.
+                    try:
+                        wda_request(device,'POST',element+'/click',{})
+                        active=wda_request(device,'GET',root+'/element/active').get('value')
+                        ident=(active.get('element-6066-11e4-a52e-4f735466cecf') or active.get('ELEMENT')) if isinstance(active,dict) else None
+                        if not isinstance(ident,str) or not ident:
+                            return {'status':'needs_replan','reason':'No focused editor could be verified; nothing typed'}
+                        if ident!=p['element_id']:
+                            element=root+'/element/'+quote(ident,safe='')
+                            focused_kind=wda_request(device,'GET',element+'/name').get('value')
+                            if focused_kind not in INPUT_TYPES:
+                                return {'status':'needs_replan','reason':'Focused control is not a supported editor; nothing typed'}
+                            focused_identity=tuple(str(attribute(name) or '') for name in ('name','label'))
+                            if not any(identity) or focused_identity!=identity:
+                                return {'status':'needs_replan','reason':'Focused editor identity changed; inspect the fresh page before typing'}
+                            matches=wda_request(device,'POST',root+'/elements',{
+                                'using':'predicate string','value':predicate(Target(label=identity[1] or identity[0],types=list(INPUT_TYPES)))}).get('value')
+                            if not isinstance(matches,list) or len(matches)!=1:
+                                return {'status':'needs_replan','reason':'Replacement editor is not unique; nothing typed'}
+                            match=matches[0]
+                            if not isinstance(match,dict) or (match.get('element-6066-11e4-a52e-4f735466cecf') or match.get('ELEMENT'))!=ident:
+                                return {'status':'needs_replan','reason':'Replacement editor could not be matched; nothing typed'}
+                            placeholder=attribute('placeholderValue')
+                        # Recheck the refreshed handle before the first content change.
+                        if (wda_request(device,'GET',element+'/displayed').get('value') is not True or
+                            wda_request(device,'GET',element+'/enabled').get('value') is not True):
+                            return {'status':'needs_replan','reason':'Focused editor is hidden or disabled; nothing typed'}
+                    except DeviceError as exc:
+                        if str(exc).lower() not in ('wda: stale element reference','wda: no such element'):raise
+                        return {'status':'needs_replan','reason':'Editor changed during focus; reacquire it from the fresh page. Nothing typed'}
                     wda_request(device,'POST',element+'/clear',{})
                     wda_request(device,'POST',element+'/value',{'value':list(p['text'])})
                     verified=attribute('value')==p['text'] and p['text']!=placeholder
                     return {'status':'completed' if verified else 'uncertain','verified':verified,
+                            'handle':{'session_id':p['session_id'],'element_id':ident or p['element_id']},
                             'reason':None if verified else 'Entered text could not be verified; do not retype automatically'}
                 if not searchable:return {'status':'needs_replan','reason':'Submission is limited to observed search or address fields'}
                 if value!=p['text'] or value==placeholder:return {'status':'needs_replan','reason':'Field value does not match a verified query; nothing submitted'}
@@ -288,20 +319,48 @@ class Controller:
             xml = wda_request(device, 'GET', root + '/source?format=xml&excluded_attributes=visible,accessible').get('value')
             return {'format': 'xml', 'source': xml, 'excluded_attributes': ['visible', 'accessible'],
                     'requires_target_verification': True}
+        if action == 'active_element':
+            try:value=wda_request(device,'GET',root+'/element/active').get('value')
+            except DeviceError as exc:
+                if str(exc)=='WDA: no such element':return None
+                raise
+            if not value:return None
+            ident=value.get('element-6066-11e4-a52e-4f735466cecf') or value.get('ELEMENT')
+            if not isinstance(ident,str) or not ident:raise DeviceError('Invalid active element handle')
+            return {'session_id':self.sessions[device],'element_id':ident,
+                'attributes':{k:value[k] for k in ('type','label','displayed','enabled','rect') if k in value}}
         if action == 'find_elements':
-            found = wda_request(device, 'POST', root + '/elements',
-                                {'using': 'accessibility id', 'value': p['query']}).get('value')
-            if not isinstance(found, list):
-                raise DeviceError('The phone returned an invalid element list')
-            elements = []
+            target=Target.model_validate(p['target']) if p.get('target') else Target(label=p['query'])
+            search_root=root
+            def find(using,value,path):
+                result=wda_request(device,'POST',path+'/elements',{'using':using,'value':value}).get('value')
+                if not isinstance(result,list):raise DeviceError('The phone returned an invalid element list')
+                return result
+            def handle(item):
+                if not isinstance(item,dict):raise DeviceError('The phone returned an invalid element ID')
+                ident=item.get('element-6066-11e4-a52e-4f735466cecf') or item.get('ELEMENT')
+                if not isinstance(ident,str) or not ident:raise DeviceError('The phone returned an invalid element ID')
+                return ident
+            if target.within:
+                scopes=find('predicate string',predicate(target.within),root)
+                if len(scopes)!=1:
+                    return {'elements':[],'count':0,'reason':'container_missing' if not scopes else 'container_ambiguous'}
+                search_root=root+'/element/'+quote(handle(scopes[0]),safe='')
+            found=[];strategy=None
+            for strategy,value in selectors(target):
+                found=find(strategy,value,search_root)
+                if found:break
+            elements=[]
             for item in found:
-                if not isinstance(item, dict):
-                    raise DeviceError('The phone returned an invalid element ID')
-                ident = item.get('element-6066-11e4-a52e-4f735466cecf') or item.get('ELEMENT')
-                if not isinstance(ident, str) or not ident:
-                    raise DeviceError('The phone returned an invalid element ID')
-                elements.append({'element_id': ident, 'session_id': self.sessions[device]})
-            return {'elements': elements, 'count': len(elements)}
+                candidate={'element_id':handle(item),'session_id':self.sessions[device]}
+                # WDA's top-level `name` means element TYPE, not accessibility name.
+                # Request attribute/name explicitly; never enrich input values.
+                attrs={k:item[k] for k in ('type','label','rect','enabled','displayed') if k in item}
+                if 'attribute/name' in item:attrs['name']=item['attribute/name']
+                if attrs:candidate['attributes']=attrs
+                elements.append(candidate)
+            return {'elements':elements,'count':len(elements),'strategy':strategy,
+                    'reason':None if elements else 'missing'}
         if action == 'alert_text':
             return wda_request(device, 'GET', root + '/alert/text').get('value')
         if action == 'pinch':

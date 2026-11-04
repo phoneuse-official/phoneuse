@@ -3,7 +3,7 @@
 [![Checks](https://github.com/phoneuse-official/phoneuse/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/phoneuse-official/phoneuse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Give your AI agent a real iPhone, right on your desk.**
+Give your AI agent a real iPhone, right on your desk.
 
 Open-source tools for controlling a USB-connected iPhone from your Mac: a local web interface,
 live screen preview, natural-language prompts, REST API, and MCP server.
@@ -18,7 +18,7 @@ live screen preview, natural-language prompts, REST API, and MCP server.
 
 **[▶ Watch the 50-second demo](https://pub-b1e2c1245ef644aa89f7c5da08db4154.r2.dev/PhoneUse%20-%20Twitter%20Launch%20-%2050s.mp4)** · Click any clip above to watch it in full · [More demos](#demo-videos)
 
-Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).
+Built by [PhoneUse](https://phoneuse.com/?utm_source=github&utm_medium=readme&utm_campaign=phoneuse-local).  
 Want phones without managing hardware on your desk? [Explore PhoneUse →](https://phoneuse.com/?utm_source=github&utm_medium=readme_cta&utm_campaign=phoneuse-local)
 
 > Experimental developer preview. Bring your own Mac, iPhone, Apple signing setup, and model access.
@@ -28,13 +28,15 @@ Want phones without managing hardware on your desk? [Explore PhoneUse →](https
 ## What you can do
 
 - Type a prompt in your browser and watch the phone do it.
-- Open apps, read what is on the screen, tap, type, and scroll.
+- Open apps, read what is on the screen (with on-device text recognition), tap, type, and scroll.
 - Watch live video of the phone screen. Optional native macOS capture is available.
 - Control the phone from your own code (REST API) or from your AI agent (MCP).
 - Stop a running task at any time, and keep separate chats in the history sidebar.
 
 Start with a reversible prompt: **“Open Safari and describe the current screen. Do not submit anything.”**
-Accessibility support varies by app. A task marked finished is a model-reported result; verify important outcomes on the device.
+Some apps are harder to control than others, especially ones with icon-only or custom-drawn buttons.
+A finished task shows **Result reported** when its answer quotes text seen on the screen, and **Needs review** when it does not.
+Either way it is the model's report, so check important results on the phone.
 
 ## Demo videos
 
@@ -114,6 +116,8 @@ In a second Terminal window in the repository folder, run:
 This opens **http://localhost:3109/** and connects the page to the API for you (see [Why is there an API key?](#why-is-there-an-api-key)).
 The web app keeps running in the background; its log is `platform/.state/recording-web.log`.
 
+After it connects, the page remembers the key in this browser, including across tabs and browser restarts.
+Next time you can open **http://localhost:3109/** directly in the same browser. A private window or clearing browser data forgets the key.
 If the page shows **Connect to your workspace** and asks for a key, close the tab and run `Start PhoneUse.command` again.
 
 ### 5. Select the phone and confirm live video
@@ -161,10 +165,12 @@ For first-time setup, run the API in Terminal (step 3) instead, so you can see i
 | **“Phone control is offline…”**, the **View only** badge, or **“Device port not open”** | The Mac can see the phone over USB, but WDA is not running or not reachable. The USB cable alone is not enough. | Repeat [step 2](#2-prepare-the-iphone-and-start-webdriveragent) and keep the WDA test running in Xcode. |
 | **“Connection released. Click Reconnect screen.”** | The page's hold on the phone ended. | Click **Reconnect screen**. |
 | The phone menu says **Waiting for a phone**, or the phone is marked **Offline** | The phone is locked, not trusted, or not connected. | Unlock it, confirm it trusts this Mac, reconnect USB, and wait a few seconds. |
-| **Connect to your workspace** (asks for a key) | The page was opened directly, without the key. | Close the tab and run `Start PhoneUse.command`. |
+| **Connect to your workspace** (asks for a key) | This browser has no saved key: a first visit without the launcher, a private window, cleared browser data, or a key the API rejected. | Close the tab and run `Start PhoneUse.command`. |
 | **“API is unavailable…”** when starting the page | The API is not running. | Start it with `./platform/start-api.sh` ([step 3](#3-start-the-local-api)), or install the [login service](#optional-start-the-api-automatically-at-login). |
 | The page shows a different checkout, or the API reports a port conflict | Ports 8765 (API) and 3109 (web) are fixed. Another PhoneUse install already using 8765 blocks this one, and the launcher connects to whatever is already running on those ports. | See what is using the port with `lsof -nP -iTCP:8765 -sTCP:LISTEN`. Stop that copy yourself, then restart the API and the page. |
 | Prompts fail with a Codex error | The Codex CLI is not signed in, not found, or out of quota. | Run `codex login status`, then see [Turn on natural-language tasks](#turn-on-natural-language-tasks). |
+| The agent cannot find a button you can see | Icon-only or custom-drawn buttons have no text to read and no accessibility label. | Tick **Use screenshots if controls cannot be found** in the chat (this shares screen images with the model), or tap it yourself on the phone. |
+| Each task takes a few seconds to start | In OCR mode, every task first builds a small text-recognition helper with Xcode. | This is expected. To skip it, choose **Accessibility only** in the chat. |
 
 Where to look: API output is in the Terminal running `start-api.sh`; web app errors are in `platform/.state/recording-web.log`.
 More help: [iPhone setup guide](platform/docs/SETUP.md#troubleshooting).
@@ -177,8 +183,11 @@ The local API can tap, type, install and remove apps, and read the phone's scree
 - **Other programs on your Mac** (scripts, a bad npm or pip package, another user account on the same Mac) do not go through a browser, so the origin check cannot stop them. The key does.
 
 You normally never type the key. The API creates it the first time it starts and saves it in `platform/.state/admin-token`, readable only by your user account.
-`Start PhoneUse.command` reads that file and passes the key to the page, which keeps it only for that browser session.
-You only see the key screen if you open `http://localhost:3109` directly. Never paste the key into issues or chats.
+`Start PhoneUse.command` reads that file and passes the key to the page. Once the key works, the page saves it in this browser's
+storage so it reconnects by itself; a key the API rejects is removed. Any page served from `http://localhost:3109` can read that
+storage, so do not run other local web apps on that port ([SECURITY.md](SECURITY.md)).
+You only see the key screen when this browser has no saved key, for example the first time you open `http://localhost:3109` directly,
+in a private window, or after clearing browser data. Never paste the key into issues or chats.
 
 ## How it works
 
@@ -189,10 +198,13 @@ Browser at localhost:3109 ── authenticated HTTP / WebSocket ── Local Pyt
                                                               └─ WDA MJPEG → live preview
 ```
 
-Prompt execution uses accessibility observations. It can fail when apps omit accessible elements;
-this is not a general vision agent. The agent is instructed to hand off purchases, credentials,
-messages and other consequential operations; those instructions are not a security sandbox.
-The raw API and manual controls can perform real actions. Supervise use on personal devices.
+Prompt tasks read the screen with on-device text recognition (OCR) first and use accessibility data
+for typing, checking results, and when OCR finds nothing. The chat can switch to "Accessibility only",
+and can optionally send screenshots to the model when a control cannot be found. Apps with
+custom-drawn controls may still fail. The agent acts on what your task asks: it will send messages,
+make purchases, delete data or change settings when the task explicitly says so. Those are model
+instructions, not a security sandbox. The raw API and manual controls can also perform real actions.
+Supervise use on personal devices.
 
 ## API and MCP
 
@@ -212,6 +224,7 @@ All settings are optional environment variables.
 | --- | --- | --- |
 | `PHONEUSE_CODEX_BIN` | API | Full path to the Codex CLI, if the API cannot find it. |
 | `PHONEUSE_CODEX_MODEL` | API | Codex model to use. It must be available to your account. |
+| `PHONEUSE_CODEX_REASONING_EFFORT` | API | `low` (default), `medium` or `high` reasoning for prompt tasks. |
 | `PHONEUSE_STATE_DIR` | API, MCP | Folder for keys, history and logs. Default `platform/.state`. Mainly for tests. |
 | `PHONEUSE_WDA_BUNDLE_ID` | API, `start-wda.py` | Bundle ID of your signed WebDriverAgent runner. See the [iPhone setup guide](platform/docs/SETUP.md). |
 | `PHONEUSE_API_URL` | MCP | API address. Default `http://127.0.0.1:8765`. |
@@ -224,8 +237,10 @@ Keep keys in private client configuration; never commit them. More examples: [do
 ## Privacy and local data
 
 The server listens only on loopback. PhoneUse links are ordinary outbound links, with campaign tags;
-they do not transfer phone data. The local prompt agent sends task text and phone accessibility data
-to the model provider through your Codex login. This is **not fully offline inference**.
+they do not transfer phone data. The local prompt agent sends your task and screen data to the model provider
+through your Codex login. By default that is text read from the screen on your Mac (not the image) plus accessibility data.
+Screenshots are sent only if you tick **Use screenshots if controls cannot be found**. This is **not fully offline inference**.
+Details: [SECURITY.md](SECURITY.md#your-data).
 
 Local state includes API tokens, device inventory, task histories, logs and uploaded assets.
 It lives in the ignored `platform/.state/` directory. Chat history is saved in your browser:
@@ -252,11 +267,11 @@ python3 scripts/check-public-tree.py
 
 Historical Calendar/Maps fixture code remains for regression tests; its personal assets and recipient configuration are not distributed.
 Do not commit videos or screenshots: `scripts/check-public-tree.py` rejects them. Demo videos are hosted outside the repository and linked ([docs/DEMOS.md](docs/DEMOS.md)).
-See [CONTRIBUTING.md](CONTRIBUTING.md) to help improve setup, reliability and accessibility support.
+See [CONTRIBUTING.md](CONTRIBUTING.md) to help improve setup, reliability and app support.
 
 ## Local or hosted?
 
-Use this repo when you want to experiment with your own iPhone and manage its signing and USB connection.
+Use this repo when you want to experiment with your own iPhone and manage its signing and cable connection.
 For the hosted product, visit [phoneuse.com](https://phoneuse.com/?utm_source=github&utm_medium=readme_footer&utm_campaign=phoneuse-local)
 and [PhoneUse documentation](https://docs.phoneuse.com/). These are separate deployments and credentials.
 

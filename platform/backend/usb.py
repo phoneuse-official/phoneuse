@@ -5,6 +5,7 @@ import plistlib
 import re
 import socket
 import struct
+from .timing import measured_wda
 
 
 class DeviceError(RuntimeError):
@@ -84,6 +85,7 @@ class UsbHTTPConnection(http.client.HTTPConnection):
         self.sock.settimeout(self.timeout)
 
 
+@measured_wda
 def wda_request(udid, method, path, body=None, *, binary=False, content_type=None, timeout=25):
     device = next((d for d in list_usb() if d['SerialNumber'] == udid), None)
     if device is None:

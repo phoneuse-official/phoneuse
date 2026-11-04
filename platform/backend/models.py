@@ -1,5 +1,6 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .targeting import Target
 
 
 class Action(BaseModel):
@@ -10,7 +11,8 @@ class Action(BaseModel):
                     'lock', 'unlock', 'locked', 'alert_text', 'accept_alert', 'dismiss_alert',
                     'clipboard_get', 'clipboard_set', 'dismiss_keyboard',
                     'source_fast', 'find_elements', 'element_state', 'element_click',
-                    'element_input_state', 'element_fill', 'element_submit_search']
+                    'element_input_state', 'element_fill', 'element_submit_search', 'active_element']
+    target: Target | None = None
     query: str | None = Field(default=None, min_length=1, max_length=500)
     element_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
     session_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[A-Za-z0-9_-]+$')
@@ -28,7 +30,11 @@ class Action(BaseModel):
 
     @model_validator(mode='after')
     def required_params(self):
-        fields = {'find_elements': ['query'], 'element_state': ['element_id','session_id'],
+        if self.action=='find_elements' and not (self.query or self.target):
+            raise ValueError('find_elements requires query or target')
+        if self.target and self.target.ref:
+            raise ValueError('Element references are task-local; use a phone program')
+        fields = { 'element_state': ['element_id','session_id'],
                   'element_input_state': ['element_id','session_id'],
                   'element_fill': ['element_id','session_id','text'],
                   'element_submit_search': ['element_id','session_id','text'],

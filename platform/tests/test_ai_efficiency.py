@@ -3,6 +3,47 @@ import json
 import pytest
 
 from backend.ai_runner import prompt_history, run, usage_tokens
+from backend.usb import DeviceError
+
+
+def test_failed_action_keeps_usage_timings_and_only_observes_after_failure():
+    class Phone:
+        current_action='element_fill'
+        calls=[]
+        def execute(self,params):
+            self.calls.append(params['action'])
+            if params['action']=='source_fast':return {'tree':'Current page'}
+            raise DeviceError('WDA: stale element reference')
+    class Model:
+        def turn(self,messages):
+            return {'usage':{'input_tokens':123,'output_tokens':4},'content':[
+                {'type':'tool_use','id':'fill','name':'device_action','input':{'action':'element_fill'}}]}
+    updates=[];phone=Phone()
+    report=run('Fill a search field',phone,Model(),{'progress':lambda **kw:updates.append(kw)})
+    assert report['status']=='failed'
+    assert report['failed_action']=='element_fill'
+    assert report['error_code']=='stale_element'
+    assert report['recovery_observed'] is True
+    assert report['reported_usage']['input_tokens']==123
+    assert report['model_calls']==1 and report['actions'][0]['ok'] is False
+    assert report['elapsed_seconds']>=report['device_seconds']
+    assert updates[-1]['error_code']=='stale_element'
+    assert phone.calls==['element_fill','source_fast']
+
+
+def test_compact_prompt_keeps_literal_evidence_and_reduces_repeated_screens():
+    from backend.codex_model import CodexModel
+    model=CodexModel.__new__(CodexModel)
+    model.executor='program';model.task_notes='Source A: weight 200 g. Remaining: compare B.'
+    messages=[{'role':'user','content':'Compare A and B'}]
+    for i in range(4):
+        tree='\n'.join(json.dumps({'type':'XCUIElementTypeStaticText','name':f'Fact {j}: weight 200 g'}) for j in range(200))
+        messages.append({'role':'user','content':[{'type':'tool_result','tool_use_id':str(i),'content':json.dumps({'tree':tree})}]})
+    prompt=model.build_prompt(messages)
+    assert 'Fact 0: weight 200 g' in prompt
+    assert 'Source A: weight 200 g' in prompt
+    assert len(prompt)<len(json.dumps(messages))*.6
+    assert 'tree' in json.loads(messages[1]['content'][0]['content'])
 
 
 def test_history_retires_only_old_screens_and_keeps_action_evidence():
@@ -103,3 +144,53 @@ def test_default_history_preserves_facts_across_three_screens():
 def test_history_rejects_invalid_retention_limits(limit):
     with pytest.raises(ValueError,match='positive integer'):
         prompt_history([],limit)
+
+
+def test_long_task_continues_past_old_step_and_time_limits(monkeypatch):
+    from backend import ai_runner
+    from backend.codex_api import TaskRequest
+
+    clock=[0.0]
+    monkeypatch.setattr(ai_runner.time,'monotonic',lambda:clock[0])
+
+    class Model:
+        calls=0
+
+        def turn(self,messages):
+            self.calls+=1
+            clock[0]+=10
+            if self.calls<=35:
+                return {'content':[{'type':'tool_use','id':str(self.calls),
+                    'name':'device_action','input':{'action':'source_fast'}}]}
+            return {'content':[{'type':'text','text':'Verified every subgoal'}]}
+
+    class Phone:
+        def execute(self,params):
+            return {'tree':'Verified page'}
+
+    request=TaskRequest(device_id='test-phone',task='Complete all subgoals')
+    report=run(request.task,Phone(),Model(),{'max_steps':request.max_steps})
+    assert report['status']=='model_reported_result'
+    assert report['model_calls']==36
+    assert report['elapsed_seconds']==360
+
+
+def test_extended_task_still_stops_at_deadline(monkeypatch):
+    from backend import ai_runner
+
+    clock=[0.0]
+    monkeypatch.setattr(ai_runner.time,'monotonic',lambda:clock[0])
+
+    class Model:
+        def turn(self,messages):
+            clock[0]+=301
+            return {'content':[{'type':'tool_use','id':str(clock[0]),
+                'name':'device_action','input':{'action':'source_fast'}}]}
+
+    class Phone:
+        def execute(self,params):
+            return {'tree':'Still working'}
+
+    report=run('Read pages',Phone(),Model(),{})
+    assert report['status']=='time_limit'
+    assert report['model_calls']==2

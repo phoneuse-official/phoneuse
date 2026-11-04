@@ -5,6 +5,7 @@ import {ArrowUp,Check,ExternalLink,LoaderCircle,MessageSquarePlus,PanelLeft,Pane
 import './chat.css';
 import {ChatHistorySidebar} from './components/chat-history-sidebar';
 import {PhonePanel} from './components/phone-panel';
+import {forgetRejectedKey} from './saved-connection';
 import {addTaskToConversation,createConversation,historyScope,loadChatHistory,reconcileTasks,saveChatHistory,type ApiTask,type ChatHistory,type ChatTask,type Conversation} from './chat-history';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -34,10 +35,36 @@ Do not interact with the connected phone, submit phone actions, change project f
 
 function statusLabel(task:ChatTask){
   if(task.status==='running')return task.stage==='thinking'?'Thinking':task.stage==='cleanup'?'Finishing':'Working';
-  if(task.status==='model_reported_result')return 'Completed';
+  if(task.status==='model_reported_result')return 'Result reported';
+  if(task.status==='unverified_result')return 'Needs review';
   if(task.status==='cancelled')return 'Stopped';
   if(task.status==='blocked')return 'Needs your action';
   return 'Needs attention';
+}
+
+function actionLabel(action?:string){
+  const labels:Record<string,string>={source_fast:'Reading the screen',find_elements:'Finding a control',
+    element_state:'Checking a control',element_input_state:'Checking the input field',
+    element_fill:'Entering text',element_submit_search:'Submitting the search',element_click:'Opening a control',
+    active_element:'Checking the focused field',launch_app:'Opening the app',phone_program:'Following the plan'};
+  return action?(labels[action]||action.replaceAll('_',' ')):'Starting';
+}
+
+function TaskTiming({task}:{task:ChatTask}){
+  const [now,setNow]=useState<number|null>(null);
+  const running=task.status==='running';
+  useEffect(()=>{
+    if(!running)return;
+    setNow(Date.now());
+    const timer=setInterval(()=>setNow(Date.now()),1000);
+    return ()=>clearInterval(timer);
+  },[running,task.id]);
+  const elapsed=task.elapsed_seconds??(task.finished?task.finished-task.created:now===null?null:Math.max(0,now/1000-task.created));
+  return <p className="task-progress">
+    {elapsed!==null?`${elapsed.toFixed(1)} seconds · `:''}{task.model_calls||0} decisions
+    {task.program_step&&running?` · step ${task.program_step} of ${task.program_total}`:''}
+    {!running?` · ${task.device_calls||0} phone actions`:''}
+  </p>;
 }
 
 export default function Demo(){
@@ -48,6 +75,8 @@ export default function Demo(){
   const [devices,setDevices]=useState<Device[]>([]);
   const [device,setDevice]=useState('');
   const [input,setInput]=useState('');
+  const [visualFallback,setVisualFallback]=useState(false);
+  const [screenMode,setScreenMode]=useState<'ocr'|'accessibility'>('ocr');
   const [tasks,setTasks]=useState<ApiTask[]>([]);
   const [conversations,setConversations]=useState<Conversation[]>([]);
   const [activeChatId,setActiveChatId]=useState<string|null>(null);
@@ -78,7 +107,7 @@ export default function Demo(){
     let savedKey=fragment||'';
     try{
       if(savedKey)sessionStorage.setItem('phoneuse-api-key',savedKey);
-      else savedKey=sessionStorage.getItem('phoneuse-api-key')||'';
+      else savedKey=sessionStorage.getItem('phoneuse-api-key')||localStorage.getItem('phoneuse-api-key')||'';
     }catch{}
     setKey(savedKey);
   },[]);
@@ -93,8 +122,11 @@ export default function Demo(){
   },[activeChatId,conversations,historyReady,authenticatedKey,key,historyStorageScope]);
 
   useEffect(()=>{
-    const expired=()=>{
-      try{sessionStorage.removeItem('phoneuse-api-key');}catch{}
+    const expired=(event:Event)=>{
+      const rejectedKey=(event as CustomEvent<{key?:string}>).detail?.key??key;
+      if(rejectedKey!==key)return;
+      try{forgetRejectedKey(sessionStorage,key);}catch{}
+      try{forgetRejectedKey(localStorage,key);}catch{}
       setKey('');
       setDevice('');
       setDevices([]);
@@ -107,7 +139,7 @@ export default function Demo(){
     };
     window.addEventListener('phoneuse-auth-expired',expired);
     return()=>window.removeEventListener('phoneuse-auth-expired',expired);
-  },[]);
+  },[key]);
 
   async function call<T>(path:string,method='GET',body?:unknown):Promise<T>{
     const response=await fetch(API+path,{
@@ -117,7 +149,7 @@ export default function Demo(){
       signal:AbortSignal.timeout(12000),
     });
     const data=await response.json() as T&{detail?:string};
-    if(response.status===401)window.dispatchEvent(new Event('phoneuse-auth-expired'));
+    if(response.status===401)window.dispatchEvent(new CustomEvent('phoneuse-auth-expired',{detail:{key}}));
     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:`Request failed (${response.status})`);
     return data;
   }
@@ -142,6 +174,8 @@ export default function Demo(){
         ]);
         if(disposed)return;
         if(!loaded){
+          // Remember only credentials that both API reads have authenticated.
+          try{localStorage.setItem('phoneuse-api-key',key);}catch{}
           // Authenticate both API reads before opening this credential's cache.
           const scope=await historyScope(key);
           if(disposed)return;
@@ -248,7 +282,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const task=await call<ApiTask>('/api/ai/tasks','POST',{device_id:device,task:prompt,executor:'program',max_steps:30,...(previousTaskId?{previous_task_id:previousTaskId}:{})});
+      const task=await call<ApiTask>('/api/ai/tasks','POST',{device_id:device,task:prompt,executor:'program',screen_mode:screenMode,visual_fallback:visualFallback,...(previousTaskId?{previous_task_id:previousTaskId}:{})});
       setTasks(current=>current.some(item=>item.id===task.id)?current.map(item=>item.id===task.id?task:item):[...current,task]);
       setConversations(current=>addTaskToConversation(current,task,chatId));
       setInput('');
@@ -274,7 +308,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const next=await call<ApiTask>('/api/ai/tasks','POST',{device_id:source.device_id,task:task.task,executor:'program',max_steps:30});
+      const next=await call<ApiTask>('/api/ai/tasks','POST',{device_id:source.device_id,task:task.task,executor:'program',screen_mode:screenMode,visual_fallback:visualFallback});
       setTasks(current=>[...current,next]);
       setConversations(current=>addTaskToConversation(current,next,chatId));
     }catch(caught){
@@ -322,14 +356,14 @@ export default function Demo(){
   if(!key||!historyReady||authenticatedKey!==key)return <main className="login-shell">
     <Card className="login-card">
       <div className="brand-lockup"><span className="brand-mark"><Sparkles aria-hidden="true"/></span><span>PhoneUse</span><Badge variant="secondary">Local</Badge></div>
-      <div className="login-copy"><h1>Connect to your workspace</h1><p>Open PhoneUse with Start PhoneUse.command to connect automatically, or enter the local API key below.</p></div>
+      <div className="login-copy"><h1>Connect to your workspace</h1><p>Connect once to get started. This browser will remember your workspace when you return. Open Start PhoneUse.command to connect automatically, or enter your local API key below.</p></div>
       {error&&<div className="inline-alert" role="alert"><span>{error}</span></div>}
       <form className="login-form" onSubmit={connect}>
         <label htmlFor="local-api-key">Local API key</label>
         <Input id="local-api-key" type="password" autoComplete="off" value={draft} onChange={event=>setDraft(event.target.value)} required/>
         <Button type="submit" className="login-submit">Connect <ArrowUp aria-hidden="true"/></Button>
       </form>
-      <div className="login-foot"><ShieldCheck aria-hidden="true"/><span>Your key stays in this browser session and is sent only to the local API.</span></div>
+      <div className="login-foot"><ShieldCheck aria-hidden="true"/><span>Your key is saved in this browser and is sent only to the local API.</span></div>
     </Card>
   </main>;
 
@@ -363,8 +397,14 @@ export default function Demo(){
                 <span className="assistant-avatar"><Sparkles aria-hidden="true"/></span>
                 <div className="assistant-content">
                   <div className="assistant-heading"><strong>PhoneUse</strong><Badge variant={running?'secondary':task.status==='model_reported_result'?'outline':'destructive'}>{running&&<LoaderCircle className="status-spinner" aria-hidden="true"/>}{statusLabel(task)}</Badge></div>
-                  {running&&<p className="task-progress">{task.current_action?.replaceAll('_',' ')||'Starting'} <span>·</span> {task.device_calls||0} phone actions</p>}
+                  {running&&<p className="task-progress">{actionLabel(task.current_action)} <span>·</span> {task.device_calls||0} phone actions</p>}
+                  <TaskTiming task={task}/>
                   {answer&&<p className="assistant-answer">{answer}</p>}
+                  {task.failed_action&&<div className="inline-alert" role="status"><div>
+                    <p>{actionLabel(task.failed_action)} failed{task.error_code==='stale_element'?' because the control changed during interaction.':'.'}</p>
+                    <p>{task.recovery_guidance}</p>
+                    {task.recovery_observed&&<p>The screen was checked again without repeating the action.</p>}
+                  </div></div>}
                   {setup&&<div className="codex-setup" role="status">
                     <strong>{setup==='path'?'Connect the Codex CLI':'Sign in to Codex'}</strong>
                     <p>{setup==='path'?'In Terminal, install the Codex CLI if needed, then sign in with':'In Terminal, sign in with'} <code>codex login</code> and finish the sign-in flow. Credentials stay with the Codex CLI; do not paste them into PhoneUse.</p>
@@ -389,12 +429,14 @@ export default function Demo(){
         <div className="composer-dock">
           <form className="chat-composer" onSubmit={event=>{event.preventDefault();void send();}}>
             <Textarea aria-label="Phone task" placeholder="Message PhoneUse" value={input} rows={1} maxLength={2000} disabled={busy||Boolean(active)} onChange={event=>setInput(event.target.value)} onKeyDown={composerKeyDown}/>
+            <label className="visual-fallback-option">Screen reading <select aria-label="Screen reading mode" value={screenMode} disabled={Boolean(active)} onChange={event=>setScreenMode(event.target.value as 'ocr'|'accessibility')}><option value="ocr">OCR first, accessibility fallback</option><option value="accessibility">Accessibility only</option></select><span>Screen text is shared with the model.</span></label>
+            <label className="visual-fallback-option"><input type="checkbox" checked={visualFallback} disabled={Boolean(active)} onChange={event=>setVisualFallback(event.target.checked)}/> Use screenshots if controls cannot be found <span>(shares screen images with the model)</span></label>
             <div className="composer-toolbar">
               <span>{active?shown.some(task=>task.id===active.id)?'Phone is working…':'A task is running in another chat…':selected?.automation==='ready'?'Enter to send · Shift + Enter for a new line':'Connect a ready phone to send a task'}</span>
               {active?<Button type="button" variant="destructive" size="icon" aria-label="Stop task" title="Stop task" onClick={()=>void stop()} disabled={busy}><span className="stop-icon"/></Button>:<Button type="submit" size="icon" aria-label="Send message" title="Send message" disabled={busy||!input.trim()||selected?.automation!=='ready'}>{busy?<LoaderCircle className="status-spinner" aria-hidden="true"/>:<ArrowUp aria-hidden="true"/>}</Button>}
             </div>
           </form>
-          <p className="safety-note">PhoneUse can make mistakes. Purchases, messages, credentials, deletion, and settings changes require human handling.</p>
+          <p className="safety-note">PhoneUse can act on your requests. Review results and stop the task whenever needed.</p>
         </div>
       </section>
 

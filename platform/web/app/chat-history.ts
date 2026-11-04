@@ -10,6 +10,14 @@ export type ApiTask={
   device_calls?:number;
   created:number;
   finished?:number;
+  elapsed_seconds?:number;
+  model_calls?:number;
+  failed_action?:string;
+  error_code?:string;
+  recovery_guidance?:string;
+  recovery_observed?:boolean;
+  program_step?:number;
+  program_total?:number;
 };
 
 export type ChatTask=Omit<ApiTask,'device_id'>;
@@ -54,7 +62,7 @@ function storedTask(task:ApiTask):ChatTask{
 }
 
 function sameTask(left:ChatTask,right:ChatTask){
-  return left.id===right.id&&left.task===right.task&&left.status===right.status&&left.stage===right.stage&&left.current_action===right.current_action&&left.answer===right.answer&&left.error===right.error&&left.device_calls===right.device_calls&&left.finished===right.finished;
+  return left.id===right.id&&left.task===right.task&&left.status===right.status&&left.stage===right.stage&&left.current_action===right.current_action&&left.answer===right.answer&&left.error===right.error&&left.device_calls===right.device_calls&&left.finished===right.finished&&left.model_calls===right.model_calls&&left.program_step===right.program_step&&left.program_total===right.program_total&&left.elapsed_seconds===right.elapsed_seconds&&left.failed_action===right.failed_action&&left.error_code===right.error_code&&left.recovery_guidance===right.recovery_guidance&&left.recovery_observed===right.recovery_observed;
 }
 
 function fromTask(task:ApiTask):Conversation{
@@ -79,6 +87,9 @@ function parseTask(value:unknown):ChatTask|null{
     ...(typeof value.error==='string'?{error:value.error}:{}),
     ...(typeof value.device_calls==='number'?{device_calls:value.device_calls}:{}),
     ...(typeof value.finished==='number'?{finished:value.finished}:{}),
+    ...Object.fromEntries(['elapsed_seconds','model_calls','program_step','program_total'].filter(key=>typeof value[key]==='number'&&Number.isFinite(value[key])).map(key=>[key,value[key]])),
+    ...Object.fromEntries(['failed_action','error_code','recovery_guidance'].filter(key=>typeof value[key]==='string').map(key=>[key,value[key]])),
+    ...(typeof value.recovery_observed==='boolean'?{recovery_observed:value.recovery_observed}:{}),
   };
 }
 
