@@ -71,7 +71,7 @@ def test_failed_tap_is_not_replayed_or_followed_by_more_actions():
                              {'action':'home'}])
     report=run('Navigate',phone,Model(),{'executor':'program'})
     assert report['status']=='failed'
-    assert [call['action'] for call in phone.calls]==['find_elements','element_state','element_click']
+    assert [call['action'] for call in phone.calls]==['find_elements','element_state','element_click','source_fast']
 
 
 def test_global_typing_is_rejected_in_program_mode():

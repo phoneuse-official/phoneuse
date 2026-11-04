@@ -470,6 +470,7 @@ def test_reference_is_rejected_when_screen_content_changed():
 def test_multiline_editor_can_receive_verified_single_line_input(monkeypatch):
     c=service.Controller();c.sessions['phone']='session';state={'value':'old'}
     def wda(device,method,path,body=None):
+        if path.endswith('/element/active'):return {'value':{'ELEMENT':HANDLE['element_id']}}
         part=path.rsplit('/',1)[-1]
         if method=='GET':
             if part in ('displayed','enabled'):return {'value':True}

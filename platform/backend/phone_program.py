@@ -297,6 +297,7 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
                     if result.get('status')!='completed':
                         status=result.get('status','uncertain')
                         steps.append({'action':step.action,'ok':False,'reason':result.get('reason','Input outcome uncertain')});break
+                    if result.get('handle'):target=result['handle']
                     # Verified entry is progress even if a later submit precondition fails.
                     if step.action=='search':steps.append({'action':'fill_field','ok':True})
                 if submitting:

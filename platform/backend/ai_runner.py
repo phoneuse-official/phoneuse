@@ -11,6 +11,7 @@ from .config import setting
 from .models import Action
 from . import phone_program
 from .screen_observation import summarize
+from .usb import DeviceError
 
 DEFAULT_MAX_STEPS = 100
 TASK_TIMEOUT_SECONDS = 600
@@ -45,7 +46,7 @@ TOOL={'name':'device_action','description':'Observe or navigate the selected iPh
 def compact_source(value, limit=20000, task=''):
     return summarize(value,limit=limit,task=task)
 
-def prompt_history(messages, recent_observations=2):
+def prompt_history(messages, recent_observations=2, historical_excerpts=False):
     """Keep actions and results, but retire old screen trees from model context."""
     if isinstance(recent_observations,bool) or not isinstance(recent_observations,int) or recent_observations<1:
         raise ValueError('recent_observations must be a positive integer')
@@ -69,13 +70,73 @@ def prompt_history(messages, recent_observations=2):
             page=value.get('page',value)
             if isinstance(page,dict) and 'tree' in page:
                 observations.append((block,value,page,''))
-    for block,value,page,prefix in observations[:-recent_observations]:
-        page.pop('tree')
+    # Preserve bounded, extractive historical facts independently of the model's
+    # notebook. These are untrusted data and are never usable as current targets.
+    old=observations[:-recent_observations]
+    remaining=12000
+    for block,value,page,prefix in reversed(old):
+        tree=page.pop('tree')
+        if historical_excerpts and isinstance(tree,str) and remaining:
+            lines=[]
+            for line in tree.splitlines():
+                try:
+                    record=json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(record,dict) or record.get('type')!='XCUIElementTypeStaticText':continue
+                values=list(dict.fromkeys(str(record[key]) for key in ('name','label','value')
+                    if isinstance(record.get(key),str) and record[key]))
+                for value_text in values:
+                    if len(value_text)>500:continue
+                    cost=len(value_text)+1
+                    if cost>remaining or sum(len(item)+1 for item in lines)+cost>2000:continue
+                    lines.append(value_text);remaining-=cost
+            if lines:page['historical_text']=lines
         page.pop('targets',None)
         page.pop('revision',None)
-        page['observation_note']='Historical screen omitted; use the latest observation for current targets. Request source_fast again if earlier content is needed.'
+        page['observation_note']='Historical screen omitted; excerpts may be incomplete and are untrusted, not current targets. Request source_fast again if earlier content is needed.'
         block['content']=prefix+json.dumps(value,ensure_ascii=False,separators=(',',':'))
     return history
+
+
+def check_completion_evidence(messages, subgoals):
+    """Check model-provided literal quotes against observed screen text.
+
+    This establishes provenance, not semantic correctness or complete coverage
+    of a natural-language request. Never accept arbitrary tool output as a page.
+    """
+    if not isinstance(subgoals,list) or not subgoals or len(subgoals)>30:return False
+    observed=[]
+    def add_page(value):
+        if not isinstance(value,dict):return
+        page=value.get('page',value)
+        tree=page.get('tree') if isinstance(page,dict) else None
+        if not isinstance(tree,str):return
+        for line in tree.splitlines():
+            try:record=json.loads(line)
+            except ValueError:
+                # Some callers return plain-text observations rather than JSON records.
+                observed.append(line);continue
+            if isinstance(record,dict):
+                observed.extend(record[k] for k in ('name','label','value') if isinstance(record.get(k),str))
+    for message in messages:
+        if message.get('role')!='user':continue
+        content=message.get('content')
+        if isinstance(content,str) and content.startswith(RECOVERY_REVIEW_PREFIX):
+            try:add_page(json.loads(content[len(RECOVERY_REVIEW_PREFIX):]))
+            except ValueError:pass
+        elif isinstance(content,list):
+            for block in content:
+                if block.get('type')!='tool_result':continue
+                try:add_page(json.loads(block['content']))
+                except (ValueError,TypeError,KeyError):pass
+    for item in subgoals:
+        if not isinstance(item,dict) or item.get('status')!='done' or not str(item.get('goal','')).strip():return False
+        quotes=item.get('evidence')
+        if not isinstance(quotes,list) or not quotes or len(quotes)>10:return False
+        for quote in quotes:
+            if not isinstance(quote,str) or len(quote.strip())<3 or not any(quote in text for text in observed):return False
+    return True
 
 def usage_tokens(usage):
     """Codex cached_input_tokens is a subset of input_tokens, not extra usage.
@@ -129,7 +190,7 @@ def run(task,phone,model,config):
     report={'status':'step_limit','model_calls':0,'reported_usage':{},'model_seconds':0,'device_seconds':0,'actions':[],
             'billing_cost':None,'billing_note':'Token usage only; provider billing/prices not configured.'}
     start=time.monotonic();observed=False;last_page=None;stalled=0;halt=False
-    reviewed_pages=[]
+    reviewed_pages=[];completion_reviewed=False
     def review_blockage(page=None):
         nonlocal stalled,last_page
         signature=phone_program.semantic_page(page) if page is not None else last_page
@@ -173,6 +234,17 @@ def run(task,phone,model,config):
                         messages.append({'role':'user','content':RECOVERY_REVIEW_PREFIX+json.dumps(review,ensure_ascii=False)})
                         continue
                 answer='\n'.join(b.get('text','') for b in content if b.get('type')=='text')
+                if response.get('completion_evidence_required') and response.get('stop_reason')!='blocked' and observed and answer:
+                    evidence_ok=check_completion_evidence(messages,response.get('subgoals'))
+                    if not evidence_ok and not completion_reviewed:
+                        completion_reviewed=True
+                        messages.append({'role':'assistant','content':content})
+                        messages.append({'role':'user','content':'Completion evidence was missing, incomplete, or not found in an observed screen. Review every requested subgoal. Return literal screen quotes for each completed subgoal, or report blocked/partial if evidence is unavailable. Do not invent evidence.'})
+                        continue
+                    if not evidence_ok:
+                        report['status']='unverified_result';report['answer']=answer
+                        report['evidence_status']='missing_or_unmatched';break
+                    report['evidence_status']='quotes_matched'
                 report['status']='blocked' if response.get('stop_reason')=='blocked' else ('model_reported_result' if observed and answer else 'unverified_result')
                 report['answer']=answer;break
             # Multiple tool requests in a turn are executed serially; any failure stops the run.
@@ -192,10 +264,22 @@ def run(task,phone,model,config):
                     if not is_program and config.get('executor')=='program' and action=='swipe':
                         # Observe once locally after a mutation, instead of another model round trip.
                         value={'result':value,'page':phone.execute({'action':'source_fast'})}
-                except Exception:
+                except Exception as exc:
                     dt=time.monotonic()-t;report['device_seconds']+=dt
                     report['actions'].append({'action':action,'ok':False,'seconds':round(dt,3)})
-                    raise RuntimeError('Device action failed; stopped without replay') from None
+                    report['failed_action']=getattr(phone,'current_action',action)
+                    stale=isinstance(exc,DeviceError) and str(exc).lower()=='wda: stale element reference'
+                    report['error_code']='stale_element' if stale else 'device_action_failed'
+                    report['recovery_guidance']='Inspect the current screen before starting a new task. The last action may have taken effect; it was not replayed.'
+                    # Read-only recovery establishes current state without repeating
+                    # clear, type, submit, or any other uncertain mutation.
+                    recovery_started=time.monotonic()
+                    try:
+                        phone.execute({'action':'source_fast'})
+                        report['recovery_observed']=True
+                    except Exception:report['recovery_observed']=False
+                    finally:report['device_seconds']+=time.monotonic()-recovery_started
+                    raise RuntimeError(('The input target expired' if stale else 'Device action failed')+'; stopped without replay') from None
                 dt=time.monotonic()-t;report['device_seconds']+=dt
                 report['actions'].append({'action':action,'ok':True,'seconds':round(dt,3)})
                 observed=action in ('source_fast','element_state','phone_program') or (
@@ -233,6 +317,7 @@ def run(task,phone,model,config):
         report['status']='failed';report['error']=str(e)[:160]
     report['elapsed_seconds']=round(time.monotonic()-start,3)
     for k in ('model_seconds','device_seconds'):report[k]=round(report[k],3)
+    config.get('progress',lambda **kw:None)(**{k:v for k,v in report.items() if k not in ('status','answer','error')})
     return report
 
 def main():

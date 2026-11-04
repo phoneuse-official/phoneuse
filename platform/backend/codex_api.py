@@ -33,6 +33,7 @@ class LocalPhone:
         self.task_text=task_text
         self.owner=owner;self.device=device;self.task_id=task_id;self.cancel=cancel;self.progress=progress
         self.device_calls=0;self.device_trace=[]
+        self.current_action=None
         self.new_lease=False;self.reserved=False;self.previous_settings=None;self.root=None
         self.supports_active_element=True
         self.target_refs=References();self.target_page=None;self.rich_targets=False
@@ -66,6 +67,7 @@ class LocalPhone:
         visual_read=self.vision and command.action in ('screenshot','window_size','orientation')
         if command.action not in ALLOWED and not visual_read:raise ValueError('Action not allowed')
         self.progress(stage='device',current_action=command.action)
+        self.current_action=command.action
         started=time.monotonic();ok=False
         try:
             if command.action not in ('source_fast','find_elements','element_state','element_input_state','active_app','screenshot','window_size','orientation','active_element'):

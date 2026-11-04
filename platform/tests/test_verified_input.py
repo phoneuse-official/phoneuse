@@ -22,6 +22,7 @@ def input_controller(monkeypatch):
 
     def wda(device,method,path,body=None):
         calls.append((method,path,body))
+        if path.endswith('/element/active'):return {'value':{'ELEMENT':'field'}}
         part=path.rsplit('/',1)[-1]
         if method=='GET':
             return {'value':state['type'] if part=='name' and '/attribute/' not in path else state.get(part)}
@@ -271,10 +272,11 @@ def test_notes_preserve_facts_when_old_trees_are_retired():
     prompt=model.build_prompt(messages)
     assert 'verified price was $42' in prompt
     assert 'Page 0' not in prompt
-    assert 'Page 1' in prompt and 'Page 2' in prompt
+    assert 'Page 1' not in prompt and 'Page 2' in prompt
     assert 'Page 0' in messages[1]['content'][0]['content']
     model.task_notes=''
-    assert 'Page 0' in model.build_prompt(messages)
+    assert 'Page 0' not in model.build_prompt(messages)
+    assert 'Page 1' in model.build_prompt(messages)
 
 
 def test_apps_are_discovered_first_then_reduced_to_task_relevance():
@@ -323,3 +325,87 @@ def test_duplicate_labels_select_only_a_unique_editable_field(editable_count):
                                    'text':'men shoes size 8.5','timeout_ms':0}]})
     assert result['status']==('completed' if editable_count==1 else 'needs_replan')
     assert sum(c['action']=='element_fill' for c in phone.calls)==(1 if editable_count==1 else 0)
+
+
+def test_focus_replacement_reacquires_same_editor_before_typing(input_controller,monkeypatch):
+    controller,state,calls=input_controller
+    original=service.wda_request
+    def wda(device,method,path,body=None):
+        if path.endswith('/element/active'):
+            return {'value':{'ELEMENT':'fresh'}}
+        if path.endswith('/elements'):return {'value':[{'ELEMENT':'fresh'}]}
+        if '/element/field/' in path and any(p.endswith('/click') for m,p,b in calls if m=='POST'):
+            raise service.DeviceError('WDA: stale element reference')
+        return original(device,method,path,body)
+    monkeypatch.setattr(service,'wda_request',wda)
+    result=perform(controller,'element_fill')
+    assert result['verified'] is True
+    assert result['handle']['element_id']=='fresh'
+    assert [path for method,path,body in calls if method=='POST' and not path.endswith('/click')]==[
+        '/session/session/element/fresh/clear','/session/session/element/fresh/value']
+
+
+def test_unrelated_focused_editor_is_not_modified(input_controller,monkeypatch):
+    controller,state,calls=input_controller
+    original=service.wda_request
+    def wda(device,method,path,body=None):
+        if path.endswith('/element/active'):return {'value':{'ELEMENT':'unrelated'}}
+        if '/element/unrelated/attribute/' in path:return {'value':'Other field'}
+        return original(device,method,path,body)
+    monkeypatch.setattr(service,'wda_request',wda)
+    assert perform(controller,'element_fill')['status']=='needs_replan'
+    assert [path for method,path,body in calls if method=='POST']==['/session/session/element/field/click']
+
+
+def test_stale_before_clear_returns_replan_without_typing(input_controller,monkeypatch):
+    controller,state,calls=input_controller
+    original=service.wda_request
+    def wda(device,method,path,body=None):
+        if method=='GET' and path.endswith('/displayed') and any(m=='POST' for m,p,b in calls):
+            raise service.DeviceError('WDA: stale element reference')
+        return original(device,method,path,body)
+    monkeypatch.setattr(service,'wda_request',wda)
+    assert perform(controller,'element_fill')['status']=='needs_replan'
+    assert state['value']=='old query'
+
+
+def test_stale_after_clear_is_not_replayed(input_controller,monkeypatch):
+    controller,state,calls=input_controller
+    original=service.wda_request
+    def wda(device,method,path,body=None):
+        result=original(device,method,path,body)
+        if method=='POST' and path.endswith('/clear'):raise service.DeviceError('WDA: stale element reference')
+        return result
+    monkeypatch.setattr(service,'wda_request',wda)
+    with pytest.raises(service.DeviceError):perform(controller,'element_fill')
+    assert state['value']==''
+    assert sum(m=='POST' and p.endswith('/clear') for m,p,b in calls)==1
+    assert not any(m=='POST' and p.endswith('/value') for m,p,b in calls)
+
+
+def test_search_submits_only_with_refreshed_fill_handle():
+    class Phone(SearchPhone):
+        def execute(self,params):
+            if params['action']=='element_fill':
+                self.calls.append(params)
+                return {'status':'completed','verified':True,'handle':{**HANDLE,'element_id':'fresh'}}
+            if params['action']=='element_submit_search':assert params['element_id']=='fresh'
+            return super().execute(params)
+    phone=Phone(['Home','Search results'])
+    program=submit_program()
+    program['steps'][0]['action']='search'
+    assert execute(phone,program)['status']=='completed'
+
+
+@pytest.mark.parametrize('matches',[[{'ELEMENT':'fresh'},{'ELEMENT':'other'}],[{'ELEMENT':'other'}]])
+def test_replacement_must_match_a_unique_editor(input_controller,monkeypatch,matches):
+    controller,state,calls=input_controller
+    original=service.wda_request
+    def wda(device,method,path,body=None):
+        if path.endswith('/element/active'):return {'value':{'ELEMENT':'fresh'}}
+        if path.endswith('/elements'):return {'value':matches}
+        return original(device,method,path,body)
+    monkeypatch.setattr(service,'wda_request',wda)
+    assert perform(controller,'element_fill')['status']=='needs_replan'
+    assert state['value']=='old query'
+    assert not any(m=='POST' and p.endswith(('/clear','/value')) for m,p,b in calls)
