@@ -129,10 +129,39 @@ limit, and token budgets still apply.
 
 ## Context and speed measurement
 
-The model maintains verified task notes so older screen trees can be retired without
-losing facts needed for the answer. Relevant app metadata and two recent trees are kept.
+The model maintains task notes with observed facts and completed and remaining subgoals.
+When notes are present, two recent trees remain in full; older trees are replaced by
+bounded, literal static-text excerpts (at most 2,000 characters per page and 12,000 total).
+These excerpts and notes can omit relevant facts, are untrusted screen data, and cannot
+be used as current target references. The model must revisit a page if needed. Relevant
+app metadata is also retained.
+
+At completion the Codex decision includes a model-generated subgoal checklist and literal
+screen quotes. The runner checks that each listed completed subgoal has quotes present in
+an actual observation. It allows one correction attempt if a quote is absent; a second
+failure yields `unverified_result`. A match establishes quote provenance only: the runner
+does not prove the checklist covers the user's entire request or that interpretations,
+calculations, or visual-only facts are correct. The UI labels an accepted answer “Result
+reported,” not independently verified completion. Screenshot-only evidence cannot pass
+the text quote check, and such work may therefore be reported as partial or unverified.
+
 The model defaults to low reasoning effort; `PHONEUSE_CODEX_REASONING_EFFORT` can select
 medium or high. CLI requests remain ephemeral.
+
+For a repeatable read-only comparison, run the synthetic outing evaluation from `platform`:
+
+```sh
+PHONEUSE_STATE_DIR=/tmp/phoneuse-eval ../.venv/bin/python -m evals.outing
+```
+
+It uses the local Codex login and provider usage, but no phone or personal data. It prints
+aggregate timings, usage and heuristic scenario checks; it does not save task history or
+screenshots. The checks do not understand arbitrary prose, so review failures and answers
+when interpreting results. Run multiple samples before drawing performance conclusions.
+The evaluation currently measures the existing ephemeral CLI path only. A persistent
+app-server comparison would need equivalent tool disabling, cancellation, schema,
+screenshot, isolation, and no-session-file guarantees before it can safely use real
+phone observations; it is not enabled by this change.
 
 Task progress includes aggregate WDA request counts/durations by lookup, observation,
 state, mutation, and screenshot, and model prompt preparation, process spawn, response
