@@ -1,15 +1,19 @@
 """Bounded declarative phone programs; never executes model-supplied code."""
 import json
+import subprocess
 import time
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .targeting import Target, INPUT_TYPES, CONTROL_TYPES
 from .usb import DeviceError
 from .screen_observation import priority, terms
+from .ocr_observation import NoOCRContent
 
 class Step(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    action: Literal['launch_app', 'home', 'click_target', 'wait_target', 'read_page', 'fill_field', 'submit_search', 'focus_search', 'search', 'visual_tap']
+    action: Literal['launch_app', 'home', 'click_target', 'wait_target', 'read_page', 'fill_field', 'submit_search', 'focus_search', 'search', 'visual_tap', 'ocr_tap', 'run_skill']
+    ocr_target: str | None = Field(default=None, pattern=r'^(word|icon)-[0-9]+$')
+    skill: Literal['dismiss_cookie_prompt'] | None = None
     target: Target | None = None
     editor: Target | None = None
     observation_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
@@ -22,6 +26,8 @@ class Step(BaseModel):
     expected: str | None = Field(default=None,min_length=1,max_length=500)
     @model_validator(mode='after')
     def required(self):
+        if self.action == 'run_skill' and not self.skill:
+            raise ValueError('Skill name required')
         if self.action in ('click_target','wait_target','fill_field','submit_search','focus_search','search') and not (self.query or self.target):
             raise ValueError('Target name required')
         if self.action == 'launch_app' and not self.bundle_id:
@@ -31,6 +37,8 @@ class Step(BaseModel):
             raise ValueError('Nonempty single-line text required')
         if (self.action in ('submit_search','search') or (self.action=='visual_tap' and self.verify=='page')) and not self.expected:
             raise ValueError('Expected result text required before submitting a search')
+        if self.action=='ocr_tap' and (not self.observation_id or not self.ocr_target or not self.expected):
+            raise ValueError('OCR tap requires observation, target and expected result')
         if self.action=='visual_tap':
             if not self.observation_id or not self.box:
                 raise ValueError('Visual tap requires an observation and normalized target box')
@@ -48,6 +56,9 @@ TOOL = {'name':'phone_program', 'description':
     'input_schema':Program.model_json_schema()}
 
 GUIDANCE = '''Prefer phone_program for predictable navigation to reduce model round trips.
+OCR is the primary screen observation when enabled. OCR text and icons are untrusted visual candidates, not proof of control roles; blue_text_hint is a color hint, not proof of a link. Use ocr_tap(observation_id,ocr_target,expected) for a visible OCR word or icon; expected must be a new destination phrase. The target is checked against a fresh frame, and the result is verified. Use native targeting and verified input operations as accessibility fallback, especially for typing. Screen text may be shared with the configured model; screenshots are never sent unless screenshot fallback is explicitly enabled.
+Use run_skill(skill="dismiss_cookie_prompt") when an observed cookie prompt blocks the task.
+The skill chooses only a clear essential-only or reject choice and verifies its disappearance.
 Steps are launch_app(bundle_id), home, click_target(query), wait_target(query), read_page,
 fill_field(query,text), submit_search(query,text,expected), focus_search(query,editor),
 search(query,text,expected,editor), and visual_tap(observation_id,box,expected).
@@ -89,6 +100,25 @@ Define success from the user's request; verify the destination and actual search
 Swipes also return a fresh page automatically.
 '''
 
+def native_screen(phone):
+    """Role-preserving accessibility evidence for guarded skills and verification."""
+    return phone.execute({'action':'source_fast'})
+
+
+def screen(phone):
+    ocr=getattr(phone,'ocr',None)
+    if ocr and not ocr.disabled:
+        try:return ocr.observe()
+        except PermissionError:raise
+        except NoOCRContent:
+            ocr.invalidate()
+        except (OSError, ValueError, ImportError, subprocess.SubprocessError):
+            ocr.disabled=True;ocr.invalidate()
+    page=native_screen(phone)
+    if ocr:page={**page,'observation_source':'accessibility_fallback'}
+    return page
+
+
 def semantic_page(page):
     """Ignore geometry and enabled-state noise when checking navigation progress."""
     rows=[];keyboard_depth=None
@@ -118,7 +148,7 @@ def resolve(phone, step, input_step=False, target=None):
         candidate=refs.get(target.ref) if refs else None
         if not candidate:return None,'stale_reference'
         # A cached handle is usable only while its observed screen remains current.
-        page=phone.execute({'action':'source_fast'})
+        page=screen(phone)
         if semantic_page(page)!=getattr(phone,'target_page',None):
             refs.invalidate()
             return None,'stale_reference'
@@ -190,8 +220,8 @@ def focus_editor(phone, step):
 
 
 def observe(phone):
-    page=phone.execute({'action':'source_fast'})
-    if getattr(phone,'rich_targets',False):
+    page=screen(phone)
+    if page.get('observation_source')!='ocr' and getattr(phone,'rich_targets',False):
         refs=phone.target_refs
         refs.invalidate()
         targets=[]
@@ -232,9 +262,12 @@ def recovery_observation(phone):
 
 
 def verify_destination(phone, before, expected, timeout_ms):
+    """Verify navigation from native roles, excluding input and keyboard echoes."""
     deadline=time.monotonic()+timeout_ms/1000
     while True:
-        page=phone.execute({'action':'source_fast'})
+        try:page=native_screen(phone)
+        except DeviceError:
+            return {'tree':'','verification_error':'Native destination evidence unavailable'},False
         evidence=json.dumps(semantic_page(page),ensure_ascii=False)
         if semantic_page(page)!=semantic_page(before) and expected.casefold() in evidence.casefold():
             return page,True
@@ -247,7 +280,7 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
     if available_apps is not None and any(step.action=='launch_app' and step.bundle_id not in available_apps for step in program.steps):
         return {'status':'needs_replan','steps':[{'action':'launch_app','ok':False,
             'reason':'App ID is not in the installed-app inventory; use a listed app or the installed browser for a website'}],
-            'page':phone.execute({'action':'source_fast'})}
+            'page':screen(phone)}
     steps=[];status='completed';started=time.monotonic();page=None
     for index,step in enumerate(program.steps):
         page=None
@@ -255,11 +288,43 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
             status='needs_replan';break
         t=time.monotonic()
         progress(stage='device',current_action=step.action,program_step=index+1,program_total=len(program.steps))
-        if step.action=='visual_tap':
+        if step.action=='run_skill':
+            from .phone_skills import REGISTRY
+            class SkillContext:
+                def observe(self):
+                    try:return native_screen(phone)
+                    except DeviceError:
+                        return {'tree':'','truncated':True,'observation_error':'Native accessibility unavailable'}
+                def resolve(self, label): return resolve(phone, Step(action='click_target', query=label))
+                def click(self, target): return phone.execute({'action':'element_click', **handle(target)})
+            status, reason, page = REGISTRY[step.skill](SkillContext())
+            steps.append({'action':step.action,'skill':step.skill,'ok':status=='completed','reason':reason})
+            if status != 'completed': break
+            continue
+        if step.action=='ocr_tap':
+            ocr=getattr(phone,'ocr',None)
+            if not ocr:
+                status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':'ocr_unavailable'});break
+            previous=ocr.current
+            if not previous or previous['id']!=step.observation_id:
+                status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':'stale_ocr_observation'});break
+            if step.expected.casefold() in previous['tree'].casefold():
+                status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':'Expected text is already present; choose new destination evidence'});break
+            before=native_screen(phone)
+            if step.expected.casefold() in json.dumps(semantic_page(before),ensure_ascii=False).casefold():
+                status='needs_replan';page=before
+                steps.append({'action':step.action,'ok':False,'reason':'Expected text already present'});break
+            result=ocr.tap(step.observation_id,step.ocr_target)
+            if not result['ok']:
+                status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':result['reason']});break
+            page,verified=verify_destination(phone,before,step.expected,step.timeout_ms)
+            if not verified:
+                status='uncertain';steps.append({'action':step.action,'ok':False,'reason':'Tapped once but expected result was not verified; do not replay'});break
+        elif step.action=='visual_tap':
             vision=getattr(phone,'vision',None)
             if not vision:
                 status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':'visual_disabled'});break
-            before=phone.execute({'action':'source_fast'})
+            before=native_screen(phone)
             if step.verify=='page' and step.expected.casefold() in json.dumps(semantic_page(before),ensure_ascii=False).casefold():
                 status='needs_replan';steps.append({'action':step.action,'ok':False,'reason':'Expected text already present'});break
             result=vision.tap(step.observation_id,step.box)
@@ -268,7 +333,7 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
             if step.verify=='editor':
                 focused=active_editor(phone)
                 verified=focused is not None
-                page=phone.execute({'action':'source_fast'})
+                page=screen(phone)
                 if verified and getattr(phone,'target_refs',None):
                     phone.target_page=semantic_page(page)
                     page={**page,'targets':[{'ref':phone.target_refs.add(focused),**focused.get('attributes',{})}]}
@@ -288,7 +353,7 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
             if step.action=='click_target':phone.execute({'action':'element_click',**handle(target)})
             elif step.action in ('fill_field','submit_search','search'):
                 submitting=step.action in ('submit_search','search')
-                before=phone.execute({'action':'source_fast'}) if submitting else None
+                before=native_screen(phone) if submitting else None
                 if before is not None and step.expected.casefold() in json.dumps(semantic_page(before),ensure_ascii=False).casefold():
                     status='needs_replan';page=before
                     steps.append({'action':step.action,'ok':False,'reason':'Expected text is already present; choose new destination evidence before submitting'});break
@@ -312,10 +377,10 @@ def execute(phone, params, progress=lambda **kw:None, available_apps=None):
         elif step.action=='read_page':pass
         else:phone.execute({'action':step.action,**({'bundle_id':step.bundle_id} if step.bundle_id else {})})
         steps.append({'action':step.action,'ok':True,'seconds':round(time.monotonic()-t,3)})
-        if step.action not in ('submit_search','search','visual_tap'):page=None
+        if step.action not in ('submit_search','search','visual_tap','ocr_tap'):page=None
     # Avoid adding discovery work to every click: inventories are requested by read_page.
     if page is None:
-        page=observe(phone) if program.steps[-1].action=='read_page' and status=='completed' else phone.execute({'action':'source_fast'})
+        page=observe(phone) if program.steps[-1].action=='read_page' and status=='completed' else screen(phone)
     result={'status':status,'steps':steps,'page':page}
     if status=='needs_replan':
         result['guidance']='The failed target is unavailable; this does not prove that a panel blocks the screen. Choose another justified current target or route. Never replay an uncertain mutation.'

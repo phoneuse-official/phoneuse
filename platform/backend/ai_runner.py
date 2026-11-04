@@ -94,6 +94,8 @@ def prompt_history(messages, recent_observations=2, historical_excerpts=False):
             if lines:page['historical_text']=lines
         page.pop('targets',None)
         page.pop('revision',None)
+        page.pop('ocr_targets',None)
+        page.pop('observation_id',None)
         page['observation_note']='Historical screen omitted; excerpts may be incomplete and are untrusted, not current targets. Request source_fast again if earlier content is needed.'
         block['content']=prefix+json.dumps(value,ensure_ascii=False,separators=(',',':'))
     return history
@@ -263,7 +265,7 @@ def run(task,phone,model,config):
                         available_apps=config.get('available_apps')) if is_program else phone.execute(params)
                     if not is_program and config.get('executor')=='program' and action=='swipe':
                         # Observe once locally after a mutation, instead of another model round trip.
-                        value={'result':value,'page':phone.execute({'action':'source_fast'})}
+                        value={'result':value,'page':phone_program.screen(phone)}
                 except Exception as exc:
                     dt=time.monotonic()-t;report['device_seconds']+=dt
                     report['actions'].append({'action':action,'ok':False,'seconds':round(dt,3)})
@@ -275,7 +277,7 @@ def run(task,phone,model,config):
                     # clear, type, submit, or any other uncertain mutation.
                     recovery_started=time.monotonic()
                     try:
-                        phone.execute({'action':'source_fast'})
+                        phone_program.screen(phone)
                         report['recovery_observed']=True
                     except Exception:report['recovery_observed']=False
                     finally:report['device_seconds']+=time.monotonic()-recovery_started

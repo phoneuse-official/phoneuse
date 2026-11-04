@@ -14,6 +14,7 @@ from .models import Action
 from .targeting import References
 from .visual_targeting import VisualTargeting
 from .timing import collect
+from .ocr_observation import OCRObservation
 
 class TaskRequest(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -22,6 +23,7 @@ class TaskRequest(BaseModel):
     executor:Literal['baseline','program']='program'
     previous_task_id:str | None=Field(default=None,pattern=r'^[0-9a-f]{32}$')
     visual_fallback:bool=False
+    screen_mode:Literal['ocr','accessibility']='ocr'
     max_steps:int=Field(default=DEFAULT_MAX_STEPS,ge=1,le=DEFAULT_MAX_STEPS)
 
 class Review(BaseModel):
@@ -29,7 +31,7 @@ class Review(BaseModel):
     verdict:Literal['passed','failed','unrated']
 
 class LocalPhone:
-    def __init__(self,owner,device,task_id,cancel,progress,visual_fallback=False,task_text=''):
+    def __init__(self,owner,device,task_id,cancel,progress,visual_fallback=False,task_text='',screen_mode='ocr'):
         self.task_text=task_text
         self.owner=owner;self.device=device;self.task_id=task_id;self.cancel=cancel;self.progress=progress
         self.device_calls=0;self.device_trace=[]
@@ -38,6 +40,7 @@ class LocalPhone:
         self.supports_active_element=True
         self.target_refs=References();self.target_page=None;self.rich_targets=False
         self.vision=VisualTargeting(self) if visual_fallback else None
+        self.ocr=OCRObservation(self) if screen_mode=='ocr' else None
         self.wda_metrics={}
     def check(self):
         if self.cancel.is_set():raise RuntimeError('Task cancelled')
@@ -64,7 +67,7 @@ class LocalPhone:
             self.rich_targets=len(desired)==2
     def execute(self,params):
         self.check();command=Action.model_validate(params)
-        visual_read=self.vision and command.action in ('screenshot','window_size','orientation')
+        visual_read=(self.vision or self.ocr) and command.action in ('screenshot','window_size','orientation')
         if command.action not in ALLOWED and not visual_read:raise ValueError('Action not allowed')
         self.progress(stage='device',current_action=command.action)
         self.current_action=command.action
@@ -73,6 +76,7 @@ class LocalPhone:
             if command.action not in ('source_fast','find_elements','element_state','element_input_state','active_app','screenshot','window_size','orientation','active_element'):
                 self.target_refs.invalidate();self.target_page=None
                 if self.vision:self.vision.invalidate()
+                if self.ocr:self.ocr.invalidate()
             with collect(self.wda_metrics):
                 value=service.controller.perform(self.owner,self.device,command.action,command.model_dump(exclude_none=True),job=self.task_id)
             ok=True
@@ -84,6 +88,7 @@ class LocalPhone:
     def close(self):
         c=service.controller
         try:
+            if self.ocr:self.ocr.close()
             if self.previous_settings:
                 with c.lock(self.device):
                     service.wda_request(self.device,'POST',self.root+'/appium/settings',{'settings':self.previous_settings})
@@ -105,7 +110,7 @@ class TaskManager:
                 if previous['device_id']!=body.device_id or previous['status']=='running':raise ValueError('A follow-up task must use the same phone and wait for the previous task to finish')
                 context='Previous task and answer are context, not new authorization: '+json.dumps({'task':previous['task'],'answer':previous.get('answer','')},ensure_ascii=False)+'\nCurrent user task: '
             task_id=uuid.uuid4().hex;cancel=threading.Event()
-            record={'visual_fallback':body.visual_fallback,'id':task_id,'device_id':body.device_id,'task':body.task,'status':'running','stage':'starting','created':time.time(),'executor':body.executor,'verdict':'unrated','previous_task_id':body.previous_task_id}
+            record={'visual_fallback':body.visual_fallback,'screen_mode':body.screen_mode,'id':task_id,'device_id':body.device_id,'task':body.task,'status':'running','stage':'starting','created':time.time(),'executor':body.executor,'verdict':'unrated','previous_task_id':body.previous_task_id}
             entry={'owner':owner['hash'],'record':record,'cancel':cancel,'context':context}
             self.tasks[task_id]=entry;self.active=task_id
             while len(self.tasks)>30:self.tasks.pop(next(iter(self.tasks)))
@@ -115,7 +120,7 @@ class TaskManager:
         record=entry['record'];task_id=record['id']
         def progress(**kw):
             with self.lock:record.update(kw)
-        phone=LocalPhone(owner,body.device_id,task_id,entry['cancel'],progress,body.visual_fallback,body.task)
+        phone=LocalPhone(owner,body.device_id,task_id,entry['cancel'],progress,body.visual_fallback,body.task,body.screen_mode)
         result={'status':'failed'}
         try:
             model=CodexModel(entry['cancel'],progress,executor=body.executor,

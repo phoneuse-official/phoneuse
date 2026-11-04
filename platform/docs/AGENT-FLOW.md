@@ -188,3 +188,22 @@ Safari DOM automation remains optional and unimplemented: raw WDA does not expos
 DOM. Appium's standard WebKit debugger path additionally requires inspection access.
 Third-party web views are not necessarily inspectable; the alternative native WebKit
 Automation session is currently simulator-only. Do not enable inspection automatically.
+
+## Bounded phone skills
+
+Navigation-result verification uses native accessibility observations even in OCR
+mode, so input values and keyboard text cannot serve as destination evidence.
+If native evidence becomes unavailable after submission or a tap, the result is
+uncertain and the action is not repeated.
+
+`run_skill` invokes a registered local routine through a restricted observation,
+resolution and click context. Skills return `completed`, `needs_replan`, or
+`uncertain` and a fresh page; an uncertain mutation must never be replayed.
+Skill observations use native accessibility roles and completeness metadata,
+independently of the primary OCR screen mode. An unavailable native observation
+cannot authorize a click or establish that a prompt disappeared.
+`dismiss_cookie_prompt` handles a single uniquely identified essential-only or
+reject choice on a complete accessibility observation. It taps once and verifies
+that cookie text is absent from a complete subsequent observation. It does not
+operate settings or use visual recognition. Register future routines in
+`backend/phone_skills`, with preconditions, action limits, verification and tests.
