@@ -5,6 +5,19 @@ All notable changes are listed here. This project is an experimental developer p
 
 ## Unreleased
 
+- **Behavior change:** the agent now sends messages, makes purchases, deletes data or changes settings when
+  the current task explicitly asks for it, and can type into ordinary email or username fields. Earlier
+  versions always stopped for a person. Masked password fields remain unsupported.
+- Prompt tasks read the screen with on-device OCR first, with accessibility as fallback. The chat can switch
+  to "Accessibility only".
+- Optional screenshot fallback (off by default) sends screen images to the model when controls cannot be found.
+- The web UI remembers the local API key in browser storage after a successful connection.
+- The chat shows elapsed time, model decisions, phone actions and recovery guidance for failed steps.
+- A finished answer must quote text observed on screen; otherwise it is marked "Needs review".
+  Accepted answers are labeled "Result reported".
+- Tasks allow up to 100 model decisions and 10 minutes (previously 30 decisions and 5 minutes).
+- New setting `PHONEUSE_CODEX_REASONING_EFFORT` (`low` by default).
+- A bounded routine for dismissing cookie prompts, and a synthetic evaluation (`python -m evals.outing`).
 - Chat history in the sidebar, scoped to each API key.
 - Guarded phone programs: verified field entry and search submission, with no automatic replay.
 - Prompts submit on Enter; responsive phone preview; better setup guidance.

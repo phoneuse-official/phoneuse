@@ -15,7 +15,9 @@ program running on your Mac could control the phone. Browsers are also limited b
 so other websites cannot call the API.
 
 `Start PhoneUse.command` reads the key and opens the UI with it in the URL fragment; the page removes
-the fragment immediately and keeps the key in session storage. Do not copy or share that first URL.
+the fragment immediately. After the key works, the page saves it in the browser's local storage so it
+reconnects automatically later. Do not copy or share that first URL. See [SECURITY.md](../SECURITY.md)
+for what saving the key in the browser means.
 
 To give a script or agent its own key, limited to one phone and with an expiry:
 
@@ -103,6 +105,18 @@ curl -s -X DELETE -H "Authorization: Bearer $KEY" $API/api/devices/$DEVICE/lease
 `GET /api/capabilities` lists every supported action. A successful action only means the command
 reached the phone; take a new screenshot or page source to confirm the result.
 
+`POST /api/ai/tasks` runs a prompt task, the same as the chat. It needs the Codex CLI.
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d "{\"device_id\":\"$DEVICE\",\"task\":\"Open Settings and read the iOS version\"}" $API/api/ai/tasks
+```
+
+Optional fields: `screen_mode` is `"ocr"` (default: on-device text recognition first, accessibility as
+fallback) or `"accessibility"`; `visual_fallback` (default `false`) sends screenshots to the model when
+controls cannot be found; `max_steps` caps model decisions (1 to 100, default 100). Poll
+`GET /api/ai/tasks/{id}` for progress and the result; `POST /api/ai/tasks/{id}/cancel` stops it.
+
 ## Settings
 
 | Variable | Used by | Purpose |
@@ -110,6 +124,7 @@ reached the phone; take a new screenshot or page source to confirm the result.
 | `PHONEUSE_STATE_DIR` | API, tests | Where keys, the database, logs and uploads live. Default `platform/.state`. |
 | `PHONEUSE_CODEX_BIN` | API | Absolute path to the Codex CLI if it is not on the API's `PATH`. |
 | `PHONEUSE_CODEX_MODEL` | API | Model name passed to Codex for prompt tasks. |
+| `PHONEUSE_CODEX_REASONING_EFFORT` | API | `low` (default), `medium` or `high` reasoning for prompt tasks. |
 | `PHONEUSE_WDA_BUNDLE_ID` | API, `start-wda.py` | Bundle ID of your signed WebDriverAgent runner. |
 
 Older `QUNKONG_*` names are still read as a fallback.

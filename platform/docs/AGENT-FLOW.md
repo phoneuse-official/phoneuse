@@ -1,8 +1,28 @@
 # Local agent navigation flow
 
 The chat uses the program executor. The model chooses task steps; Python resolves
-current targets, executes each mutation once, and returns the resulting accessibility
-page. Live video is a separate viewer stream. Screenshot model input is opt-in.
+current targets, executes each mutation once, and returns a fresh screen observation.
+Live video is a separate viewer stream. Screenshot model input is opt-in.
+
+## OCR screen mode
+
+`screen_mode` defaults to `ocr`; the chat offers "OCR first, accessibility fallback" and
+"Accessibility only". In OCR mode each observation takes a WDA screenshot and recognizes
+English text on the Mac with Apple's Vision framework. The model receives recognized words,
+a few toolbar icon guesses (back, close, menu, search) and normalized boxes, not the image.
+
+The first observation in each task compiles `platform/native/ocr-screen.swift` with
+`xcrun swiftc` into a private temporary directory, which is removed when the task ends.
+This adds several seconds to the start of every OCR task. If OCR finds no text or icons,
+that observation falls back to accessibility. If the helper cannot be built or run, the
+rest of the task uses accessibility.
+
+`ocr_tap(observation_id, ocr_target, expected)` taps the center of one OCR word or icon.
+The observation must be at most 45 seconds old, and a fresh frame must show the same
+viewport, orientation and target region. `expected` must be text not already on the
+screen; it is verified on a fresh accessibility page, and an unverified tap is not replayed.
+Typing, search submission, phone skills and result verification always use native
+accessibility observations.
 
 ## Screen observations
 
@@ -130,7 +150,8 @@ limit, and token budgets still apply.
 ## Context and speed measurement
 
 The model maintains task notes with observed facts and completed and remaining subgoals.
-When notes are present, two recent trees remain in full; older trees are replaced by
+When notes are present, only the latest tree remains in full (the latest two without
+notes); older trees are replaced by
 bounded, literal static-text excerpts (at most 2,000 characters per page and 12,000 total).
 These excerpts and notes can omit relevant facts, are untrusted screen data, and cannot
 be used as current target references. The model must revisit a page if needed. Relevant
