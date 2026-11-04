@@ -62,3 +62,25 @@ test('unscoped legacy history is never opened for a credential',()=>{
   cache.setItem('phoneuse-chat-history',JSON.stringify({conversations:reconcileTasks([],[task])}));
   assert.equal(loadChatHistory(cache,'authenticated-owner').conversations.length,0);
 });
+
+test('failure diagnostics survive polling and reloading',()=>{
+  const cache=storage();
+  const initial=reconcileTasks([],[task]);
+  const failure={...task,status:'failed',finished:39,elapsed_seconds:36.6,model_calls:3,
+    failed_action:'element_fill',error_code:'stale_element',recovery_observed:true,
+    recovery_guidance:'Inspect the screen before starting a new task.',device_calls:8};
+  const updated=reconcileTasks(initial,[failure]);
+  assert.equal(updated[0].tasks[0].error_code,'stale_element');
+  saveChatHistory(cache,{activeId:updated[0].id,conversations:updated},'owner');
+  const restored=loadChatHistory(cache,'owner').conversations[0].tasks[0];
+  assert.equal(restored.elapsed_seconds,36.6);
+  assert.equal(restored.failed_action,'element_fill');
+  assert.equal(restored.recovery_observed,true);
+  assert.equal(restored.model_calls,3);
+});
+
+test('program step advances even when the current action name is unchanged',()=>{
+  const initial=reconcileTasks([],[{...task,program_step:1,program_total:3}]);
+  const updated=reconcileTasks(initial,[{...task,program_step:2,program_total:3}]);
+  assert.equal(updated[0].tasks[0].program_step,2);
+});

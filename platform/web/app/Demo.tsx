@@ -35,10 +35,36 @@ Do not interact with the connected phone, submit phone actions, change project f
 
 function statusLabel(task:ChatTask){
   if(task.status==='running')return task.stage==='thinking'?'Thinking':task.stage==='cleanup'?'Finishing':'Working';
-  if(task.status==='model_reported_result')return 'Completed';
+  if(task.status==='model_reported_result')return 'Result reported';
+  if(task.status==='unverified_result')return 'Needs review';
   if(task.status==='cancelled')return 'Stopped';
   if(task.status==='blocked')return 'Needs your action';
   return 'Needs attention';
+}
+
+function actionLabel(action?:string){
+  const labels:Record<string,string>={source_fast:'Reading the screen',find_elements:'Finding a control',
+    element_state:'Checking a control',element_input_state:'Checking the input field',
+    element_fill:'Entering text',element_submit_search:'Submitting the search',element_click:'Opening a control',
+    active_element:'Checking the focused field',launch_app:'Opening the app',phone_program:'Following the plan'};
+  return action?(labels[action]||action.replaceAll('_',' ')):'Starting';
+}
+
+function TaskTiming({task}:{task:ChatTask}){
+  const [now,setNow]=useState<number|null>(null);
+  const running=task.status==='running';
+  useEffect(()=>{
+    if(!running)return;
+    setNow(Date.now());
+    const timer=setInterval(()=>setNow(Date.now()),1000);
+    return ()=>clearInterval(timer);
+  },[running,task.id]);
+  const elapsed=task.elapsed_seconds??(task.finished?task.finished-task.created:now===null?null:Math.max(0,now/1000-task.created));
+  return <p className="task-progress">
+    {elapsed!==null?`${elapsed.toFixed(1)} seconds · `:''}{task.model_calls||0} decisions
+    {task.program_step&&running?` · step ${task.program_step} of ${task.program_total}`:''}
+    {!running?` · ${task.device_calls||0} phone actions`:''}
+  </p>;
 }
 
 export default function Demo(){
@@ -370,8 +396,14 @@ export default function Demo(){
                 <span className="assistant-avatar"><Sparkles aria-hidden="true"/></span>
                 <div className="assistant-content">
                   <div className="assistant-heading"><strong>PhoneUse</strong><Badge variant={running?'secondary':task.status==='model_reported_result'?'outline':'destructive'}>{running&&<LoaderCircle className="status-spinner" aria-hidden="true"/>}{statusLabel(task)}</Badge></div>
-                  {running&&<p className="task-progress">{task.current_action?.replaceAll('_',' ')||'Starting'} <span>·</span> {task.device_calls||0} phone actions</p>}
+                  {running&&<p className="task-progress">{actionLabel(task.current_action)} <span>·</span> {task.device_calls||0} phone actions</p>}
+                  <TaskTiming task={task}/>
                   {answer&&<p className="assistant-answer">{answer}</p>}
+                  {task.failed_action&&<div className="inline-alert" role="status"><div>
+                    <p>{actionLabel(task.failed_action)} failed{task.error_code==='stale_element'?' because the control changed during interaction.':'.'}</p>
+                    <p>{task.recovery_guidance}</p>
+                    {task.recovery_observed&&<p>The screen was checked again without repeating the action.</p>}
+                  </div></div>}
                   {setup&&<div className="codex-setup" role="status">
                     <strong>{setup==='path'?'Connect the Codex CLI':'Sign in to Codex'}</strong>
                     <p>{setup==='path'?'In Terminal, install the Codex CLI if needed, then sign in with':'In Terminal, sign in with'} <code>codex login</code> and finish the sign-in flow. Credentials stay with the Codex CLI; do not paste them into PhoneUse.</p>
