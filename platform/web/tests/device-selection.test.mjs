@@ -40,3 +40,13 @@ test('prefers an online ready device on initial load or replacement',()=>{
   assert.equal(selectAvailableDevice(candidates,'stale'),'ready');
   assert.equal(selectAvailableDevice(candidates,'unavailable'),'unavailable');
 });
+
+test('keeps a disconnected task phone selected until the task ends',()=>{
+  const candidates=[
+    {id:'task-phone',online:false,automation:'not_running'},
+    {id:'other-phone',online:true,automation:'ready'},
+  ];
+  const duringTask=selectAvailableDevice(candidates,'task-phone',true);
+  assert.equal(duringTask,'task-phone');
+  assert.equal(selectAvailableDevice(candidates,duringTask,false),'other-phone');
+});
