@@ -217,13 +217,14 @@ export default function Demo(){
     return()=>{disposed=true;clearInterval(timer);};
   },[key]);
 
+  const active=tasks.find(task=>task.status==='running');
+
   useEffect(()=>{
-    const available=selectAvailableDevice(devices,device);
+    const available=selectAvailableDevice(devices,device,Boolean(active));
     if(available!==device)setDevice(available);
-  },[device,devices]);
+  },[device,devices,active]);
 
   const selected=devices.find(item=>item.id===device);
-  const active=tasks.find(task=>task.status==='running');
   const currentConversation=conversations.find(item=>item.id===activeChatId);
   const shown=currentConversation?.tasks||[];
   const historyVersion=JSON.stringify(shown);
