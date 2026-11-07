@@ -27,7 +27,7 @@ export function PhonePanel({apiKey,device,devices,active,revision,onDeviceChange
     <div className="phone-stage">
       <div className="phone-frame">
         <div className="phone-screen">
-          {online?<LiveScreen deviceId={device} apiKey={apiKey} accessRevision={String(revision)} hideIndicator className="phone-screen-canvas"/>:<div className="phone-empty"><Smartphone aria-hidden="true"/><strong>{selected?'Phone is offline':'Connect your iPhone'}</strong><span>{selected?'Unlock the iPhone and restart WebDriverAgent to reconnect.':'Connect a phone by USB to see its live screen here.'}</span></div>}
+          {online?<LiveScreen deviceId={device} apiKey={apiKey} accessRevision={`${revision}:${selected?.automation}`} hideIndicator className="phone-screen-canvas"/>:<div className="phone-empty"><Smartphone aria-hidden="true"/><strong>{selected?'Phone is offline':'Connect your iPhone'}</strong><span>{selected?'Unlock the iPhone and restart WebDriverAgent to reconnect.':'Connect a phone by USB to see its live screen here.'}</span></div>}
         </div>
       </div>
     </div>
@@ -36,7 +36,7 @@ export function PhonePanel({apiKey,device,devices,active,revision,onDeviceChange
       <div className="phone-footer-heading">
         <h2>Your iPhone</h2>
         {online&&<Badge variant="outline" className={`device-state ${ready?'is-ready':'is-view-only'}`}>
-          <span aria-hidden="true" className="status-dot"/>{ready?'Ready':'View only'}
+          <span aria-hidden="true" className="status-dot"/>{ready?'Ready':selected?.recovery?.phase==='starting'?'Recovering':selected?.automation==='checking'?'Checking':'Needs attention'}
         </Badge>}
       </div>
       <div className="phone-device-controls">

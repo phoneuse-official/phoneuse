@@ -76,7 +76,6 @@ export default function Demo(){
   const [devices,setDevices]=useState<Device[]>([]);
   const [device,setDevice]=useState('');
   const [input,setInput]=useState('');
-  const [visualFallback,setVisualFallback]=useState(false);
   const [screenMode,setScreenMode]=useState<'ocr'|'accessibility'>('ocr');
   const [tasks,setTasks]=useState<ApiTask[]>([]);
   const [conversations,setConversations]=useState<Conversation[]>([]);
@@ -282,7 +281,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const task=await call<ApiTask>('/api/ai/tasks','POST',{device_id:device,task:prompt,executor:'program',screen_mode:screenMode,visual_fallback:visualFallback,...(previousTaskId?{previous_task_id:previousTaskId}:{})});
+      const task=await call<ApiTask>('/api/ai/tasks','POST',{device_id:device,task:prompt,executor:'program',screen_mode:screenMode,visual_fallback:false,...(previousTaskId?{previous_task_id:previousTaskId}:{})});
       setTasks(current=>current.some(item=>item.id===task.id)?current.map(item=>item.id===task.id?task:item):[...current,task]);
       setConversations(current=>addTaskToConversation(current,task,chatId));
       setInput('');
@@ -308,7 +307,7 @@ export default function Demo(){
     setBusy(true);
     setError('');
     try{
-      const next=await call<ApiTask>('/api/ai/tasks','POST',{device_id:source.device_id,task:task.task,executor:'program',screen_mode:screenMode,visual_fallback:visualFallback});
+      const next=await call<ApiTask>('/api/ai/tasks','POST',{device_id:source.device_id,task:task.task,executor:'program',screen_mode:screenMode,visual_fallback:false});
       setTasks(current=>[...current,next]);
       setConversations(current=>addTaskToConversation(current,next,chatId));
     }catch(caught){
@@ -384,7 +383,7 @@ export default function Demo(){
         <div className="chat-scroll" ref={historyRef} role="log" aria-live="polite" aria-relevant="additions text">
           {historyError&&<div className="inline-alert" role="alert"><span>{historyError}</span></div>}
           {error&&<div className="inline-alert" role="alert"><span>{error}</span><Button type="button" variant="ghost" size="icon-sm" aria-label="Dismiss error" onClick={()=>setError('')}><X aria-hidden="true"/></Button></div>}
-          {selected&&selected.automation!=='ready'&&<div className="inline-alert connection-alert" role="status"><span>Phone control is offline. Keep the iPhone unlocked and WebDriverAgent running in Xcode. Live video may still be available.</span></div>}
+          {selected&&selected.automation!=='ready'&&<div className="inline-alert connection-alert" role="status"><span>{selected.detail || 'Checking the iPhone connection and screen capture.'}</span></div>}
           {active&&!shown.some(task=>task.id===active.id)&&<div className="inline-alert connection-alert" role="status"><span>A task is running in another chat. Switch back to follow its progress.</span></div>}
 
           {shown.length?shown.map(task=>{
@@ -430,7 +429,6 @@ export default function Demo(){
           <form className="chat-composer" onSubmit={event=>{event.preventDefault();void send();}}>
             <Textarea aria-label="Phone task" placeholder="Message PhoneUse" value={input} rows={1} maxLength={2000} disabled={busy||Boolean(active)} onChange={event=>setInput(event.target.value)} onKeyDown={composerKeyDown}/>
             <label className="visual-fallback-option">Screen reading <select aria-label="Screen reading mode" value={screenMode} disabled={Boolean(active)} onChange={event=>setScreenMode(event.target.value as 'ocr'|'accessibility')}><option value="ocr">OCR first, accessibility fallback</option><option value="accessibility">Accessibility only</option></select><span>Screen text is shared with the model.</span></label>
-            <label className="visual-fallback-option"><input type="checkbox" checked={visualFallback} disabled={Boolean(active)} onChange={event=>setVisualFallback(event.target.checked)}/> Use screenshots if controls cannot be found <span>(shares screen images with the model)</span></label>
             <div className="composer-toolbar">
               <span>{active?shown.some(task=>task.id===active.id)?'Phone is working…':'A task is running in another chat…':selected?.automation==='ready'?'Enter to send · Shift + Enter for a new line':'Connect a ready phone to send a task'}</span>
               {active?<Button type="button" variant="destructive" size="icon" aria-label="Stop task" title="Stop task" onClick={()=>void stop()} disabled={busy}><span className="stop-icon"/></Button>:<Button type="submit" size="icon" aria-label="Send message" title="Send message" disabled={busy||!input.trim()||selected?.automation!=='ready'}>{busy?<LoaderCircle className="status-spinner" aria-hidden="true"/>:<ArrowUp aria-hidden="true"/>}</Button>}

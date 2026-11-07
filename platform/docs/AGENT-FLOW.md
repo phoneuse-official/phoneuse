@@ -76,9 +76,9 @@ inspect the actual destination/results before claiming completion.
 
 ## Visual fallback
 
-`visual_fallback` defaults to false. The composer offers an explicit screenshot option
-that explains screen images are shared with the configured model. Enabling this option
-does not enable native capture; the fallback uses WDA screenshots.
+`visual_fallback` defaults to false. The composer leaves it disabled; API clients can
+explicitly enable it to share screen images with the configured model. Enabling this
+option does not enable native capture; the fallback uses WDA screenshots.
 
 On a recoverable native targeting failure, an enabled task captures a full-screen
 image and returns its observation ID and pixel dimensions. PNG bytes remain in memory,
