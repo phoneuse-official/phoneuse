@@ -260,7 +260,7 @@ async def stream(websocket: WebSocket, device: str):
             await asyncio.wait_for(websocket.send_bytes(data), timeout=1)
     except (PermissionError, DeviceError) as exc:
         with contextlib.suppress(Exception):
-            await websocket.send_json({'type': 'error', 'message': str(exc), 'retryable': not isinstance(exc,(PermissionError,LeaseError))})
+            await websocket.send_json({'type': 'error', 'message': str(exc), 'retryable': not isinstance(exc,(PermissionError,LeaseError)) and 'iPhone UI automation is not authorized' not in str(exc)})
             await websocket.close(code=1008 if isinstance(exc, (PermissionError, LeaseError)) else 1011)
     except (WebSocketDisconnect, TimeoutError, RuntimeError):
         with contextlib.suppress(Exception):

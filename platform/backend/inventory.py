@@ -1,12 +1,14 @@
 """Nonblocking device snapshots; slow USB metadata/status probes run off the request path."""
 import json
+import base64
+import binascii
 import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from .config import setting
-from .usb import list_usb, device_info, wda_request
+from .usb import DeviceError, list_usb, device_info, wda_request
 
 class Inventory:
     def __init__(self):
@@ -30,9 +32,29 @@ class Inventory:
             except Exception:pass
         try:
             status=wda_request(ident,'GET','/status',timeout=2).get('value') or {}
-            health={'automation':'ready' if status.get('ready') is True else 'not_running','wda':status.get('build',{}).get('version'),'detail':''}
+            health={'automation':'checking' if status.get('ready') is True else 'not_running','wda':status.get('build',{}).get('version'),'detail':'Checking iPhone screen capture' if status.get('ready') is True else 'WebDriverAgent is not ready', 'wda_reachable':status.get('ready') is True}
+            if status.get('ready') is True:
+                # Serialize probes with phone commands and never interrupt a running task.
+                from .service import controller
+                lock=controller.lock(ident)
+                if ident in controller.reservations or not lock.acquire(blocking=False):
+                    health={k:old[k] for k in ('automation','detail','wda_reachable','screen_capture','health_code') if k in old}
+                else:
+                    try:
+                        if ident in controller.reservations:
+                            health={k:old[k] for k in ('automation','detail','wda_reachable','screen_capture','health_code') if k in old}
+                            return
+                        value=wda_request(ident,'GET','/screenshot',timeout=8).get('value')
+                        if not isinstance(value,str) or len(value)>12*1024*1024: raise DeviceError('Invalid screenshot')
+                        frame=base64.b64decode(value,validate=True)
+                        if not (frame.startswith(b'\xff\xd8') and frame.endswith(b'\xff\xd9') or frame.startswith(b'\x89PNG\r\n\x1a\n')): raise DeviceError('Invalid screenshot')
+                        health.update(automation='ready',detail='',screen_capture='ready',health_code=None)
+                    except (DeviceError, OSError, ValueError, binascii.Error) as exc:
+                        code=getattr(exc,'code',None)
+                        health.update(automation='unauthorized' if code else 'screen_unavailable',screen_capture='unavailable',health_code=code,detail=str(exc) if code else 'Unable to capture the iPhone screen. Check that the phone is unlocked and WebDriverAgent is running.')
+                    finally: lock.release()
         except Exception:
-            health={'automation':'not_running','detail':'WDA is not reachable yet; recovering'}
+            health={'automation':'not_running','detail':'WebDriverAgent is not reachable. Keep the iPhone unlocked and start its test runner.','wda_reachable':False,'screen_capture':'unknown','health_code':None}
         with self.guard:
             current=self.items.get(ident,{})
             if current.get('usb_id')==generation and current.get('online'):
@@ -45,9 +67,12 @@ class Inventory:
                 if ident not in online:item.update(online=False,automation='offline',detail='USB disconnected; waiting to reconnect')
             for d in devices:
                 ident=d['SerialNumber'];old=self.items.get(ident,{})
+                if old.get('usb_id') != d['DeviceID'] or old.get('online') is not True:
+                    old={**old,'automation':'checking','detail':'Checking the device connection','screen_capture':'unknown','wda_reachable':False}
+                    self.last_probe.pop(ident,None)
                 self.items[ident]={**{'id':ident,'name':'iPhone','model':'Unknown','ios':'Unknown','automation':'checking'},**old,
                                   'online':True,'connection':'USB','usb_id':d['DeviceID'],'seen_at':now}
-                if (not self.pending.get(ident) or self.pending[ident].done()) and now-self.last_probe.get(ident,0)>4:
+                if (not self.pending.get(ident) or self.pending[ident].done()) and now-self.last_probe.get(ident,0)>15:
                     self.last_probe[ident]=now;self.pending[ident]=pool.submit(self.probe,d,d['DeviceID'])
 
     def loop(self):

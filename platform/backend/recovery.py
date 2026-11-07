@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .service import STATE, allowed, controller, database
 from .usb import DeviceError, list_usb, wda_request
+from .inventory import inventory
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -120,18 +121,26 @@ class Supervisor:
                 finally:controller.lock(device).release()
             self.state(device,'offline','Waiting for USB to reconnect',failures=0,healthy_since=0)
             return
-        try:
-            healthy=wda_request(device,'GET','/status',timeout=3).get('value',{}).get('ready') is True
-        except (DeviceError,OSError):
-            healthy=False
+        health=next((item for item in inventory.snapshot() if item['id']==device),{})
+        # Inventory performs the bounded screenshot probe. Do not treat status alone as
+        # proof of a working XCTest session, or recover from stale observations.
+        if time.time()-health.get('checked_at',0)>45 or health.get('automation')=='checking':
+            self.state(device,'probing','Checking WebDriverAgent and screen capture')
+            return
+        healthy=health.get('automation')=='ready'
         if healthy:
             since=state.get('healthy_since') or now
             self.state(device,'ready','WDA is healthy; automatic recovery is on',failures=0,healthy_since=since,
                        attempts=0 if now-since>=30 else state.get('attempts',0),next_retry=0)
             return
+        if health.get('wda_reachable') and not (process and process.poll() is None):
+            self.state(device,'needs_attention',(health.get('detail') or 'Screen capture failed.')+' Restart the externally managed WebDriverAgent test runner.')
+            return
+        if state.get('last_failed_probe')==health.get('checked_at'):
+            return
         failures=state.get('failures',0)+1
         with self.guard:
-            self.states[device].update(failures=failures,healthy_since=0)
+            self.states[device].update(failures=failures,healthy_since=0,last_failed_probe=health.get('checked_at'))
         if device in controller.reservations:
             self.state(device,'waiting_idle','A task is still running; WDA will be recovered after it ends')
             return
@@ -139,7 +148,7 @@ class Supervisor:
             self.state(device,'starting','WDA is starting; keep the iPhone unlocked')
             return
         if failures<3:
-            self.state(device,'probing','Rechecking the WDA connection before restarting')
+            self.state(device,'probing',health.get('detail') or 'Rechecking the WDA connection before restarting')
             return
         attempts=state.get('attempts',0)
         if attempts>=5:

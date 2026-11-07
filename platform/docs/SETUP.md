@@ -4,6 +4,10 @@
 
 Install full Xcode from Apple. Connect your iPhone, unlock it, and accept the trust prompt yourself.
 Enable Developer Mode in iPhone Settings and complete the required restart and confirmation.
+On the unlocked iPhone, also enable **Settings → Developer → Enable UI Automation**. If the
+setting is enabled after WDA starts, restart the WDA test runner so it receives a fresh session.
+An authorization error can also mean the existing session needs restarting; it does not prove
+the setting is disabled.
 
 Obtain WebDriverAgent from the official [Appium repository](https://github.com/appium/WebDriverAgent).
 Follow [Appium real-device setup](https://appium.github.io/appium-xcuitest-driver/latest/preparation/real-device-config/).
@@ -31,6 +35,9 @@ Use the actual installed runner bundle ID. This launcher requires compatible App
 installed by Xcode; no developer images are shipped here. Do not start it while Xcode already owns an active runner.
 For optional recovery, `PHONEUSE_WDA_BUNDLE_ID` must be set in the API process environment to the same
 runner ID before enabling recovery. Otherwise recovery uses Appium's default bundle ID and may fail.
+Recovery restarts only a runner it manages. If an externally managed runner is reachable but cannot
+capture the screen, restart its test session in the tool that launched it. Recovery waits until the
+phone is idle and does not replay a task's last action.
 Never replay an uncertain purchase or message after a disconnect; check the app first.
 
 ## 3. Video

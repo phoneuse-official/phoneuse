@@ -9,7 +9,13 @@ from .timing import measured_wda
 
 
 class DeviceError(RuntimeError):
-    pass
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
+
+
+UI_AUTOMATION_GUIDANCE = ('iPhone UI automation is not authorized. Unlock your iPhone and check '
+                          'Settings → Developer → Enable UI Automation. If you just enabled it, restart WebDriverAgent.')
 
 
 class OutcomeUnknown(DeviceError):
@@ -104,6 +110,8 @@ def wda_request(udid, method, path, body=None, *, binary=False, content_type=Non
         if response.status >= 400 or isinstance(value, dict) and value.get('error'):
             if binary and isinstance(value, dict) and re.search(r'authori[sz]|\u6388\u6743', str(value.get('message', '')), re.I):
                 raise OutcomeUnknown('Waiting for Photos permission: open WebDriverAgent on the iPhone, allow access, and check the photo library first. This request may still finish after permission is granted, so do not retry it directly')
+            if isinstance(value, dict) and 'not authorized for performing ui testing actions' in str(value.get('message', '')).casefold():
+                raise DeviceError(UI_AUTOMATION_GUIDANCE, code='ui_automation_unauthorized')
             raise DeviceError(f"WDA: {value.get('error', response.status) if isinstance(value, dict) else response.status}")
         return result
     except (OSError, http.client.HTTPException, ValueError) as exc:

@@ -34,6 +34,7 @@ It creates the Python environment, installs the locked backend dependencies, and
 
 1. Connect the iPhone to the Mac over USB, unlock it, and accept **Trust This Computer** if prompted. Keep it unlocked during setup.
 2. On the iPhone, enable **Developer Mode** in **Settings → Privacy & Security → Developer Mode**, restart when prompted, and confirm Developer Mode after the restart.
+   Enable **Settings → Developer → Enable UI Automation** as well.
 3. Get WebDriverAgent only from the official [Appium WebDriverAgent repository](https://github.com/appium/WebDriverAgent) and follow Appium's [real-device setup](https://appium.github.io/appium-xcuitest-driver/latest/preparation/real-device-config/).
 4. Open `WebDriverAgent.xcodeproj` in Xcode. Select the `WebDriverAgentRunner` target, choose your Apple signing team, set a unique bundle identifier if Xcode requires one, and select your physical iPhone as the run destination.
 5. Run **Product → Test** (⌘U). Resolve any signing, trust, or iOS compatibility errors in Xcode, and keep the test running. PhoneUse needs WDA running on the phone for the live preview and phone control.
