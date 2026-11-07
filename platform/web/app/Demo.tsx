@@ -6,6 +6,7 @@ import './chat.css';
 import {ChatHistorySidebar} from './components/chat-history-sidebar';
 import {PhonePanel} from './components/phone-panel';
 import {forgetRejectedKey} from './saved-connection';
+import {selectAvailableDevice} from './device-selection';
 import {addTaskToConversation,createConversation,historyScope,loadChatHistory,reconcileTasks,saveChatHistory,type ApiTask,type ChatHistory,type ChatTask,type Conversation} from './chat-history';
 import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
@@ -217,10 +218,8 @@ export default function Demo(){
   },[key]);
 
   useEffect(()=>{
-    if(!device&&devices.length){
-      const preferred=devices.find(item=>item.online!==false&&item.automation==='ready')||devices.find(item=>item.online!==false)||devices[0];
-      setDevice(preferred.id);
-    }
+    const available=selectAvailableDevice(devices,device);
+    if(available!==device)setDevice(available);
   },[device,devices]);
 
   const selected=devices.find(item=>item.id===device);
